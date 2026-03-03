@@ -1,7 +1,7 @@
 import streamlit as st
 
 from modules.config import PAGE_TITLE, PAGE_LAYOUT, SIDEBAR_STATE
-from modules.ui_components import render_sidebar, display_results, display_probability_analysis_results, display_comparison_results
+from modules.ui_components import render_sidebar, display_results, display_probability_analysis_results, display_comparison_results, display_comparison_probability_results
 from modules.investment import (
     get_investment_dates,
     run_backtest_calculation,
@@ -10,7 +10,13 @@ from modules.investment import (
     run_comparison_backtest
 )
 from modules.risk_analyzer import analyze_risk_metrics
-from modules.probability_analyzer import run_probability_analysis, calculate_probability_statistics
+from modules.probability_analyzer import (
+    run_probability_analysis, 
+    calculate_probability_statistics,
+    run_smart_probability_analysis,
+    run_comparison_probability_analysis,
+    calculate_comparison_statistics
+)
 
 st.set_page_config(page_title=PAGE_TITLE, layout=PAGE_LAYOUT, initial_sidebar_state=SIDEBAR_STATE)
 
@@ -111,38 +117,111 @@ if params['df'] is not None and params['run_backtest']:
                 progress_bar.progress(progress)
                 status_text.text(f"正在计算... {current}/{total} ({progress}%)")
             
-            with st.spinner("正在进行概率分析..."):
-                results = run_probability_analysis(
-                    params['df'],
-                    params['analysis_start_date'],
-                    params['analysis_end_date'],
-                    params['investment_duration'],
-                    params['freq_type'],
-                    params['freq_param'],
-                    params['amount'],
-                    params['realistic_params'],
-                    sampling=sampling,
-                    progress_callback=update_progress
-                )
-                
-                if len(results) == 0:
-                    st.warning("没有找到有效的分析结果！请检查参数设置。")
-                else:
-                    stats = calculate_probability_statistics(results, params['realistic_params'])
-                    
-                    progress_bar.progress(100)
-                    status_text.text(f"分析完成！共 {len(results)} 次模拟")
-                    
-                    display_probability_analysis_results(
-                        stats,
-                        results,
+            strategy_mode = params.get('strategy_mode', '固定定投')
+            
+            if strategy_mode == '固定定投':
+                with st.spinner("正在进行概率分析..."):
+                    results = run_probability_analysis(
+                        params['df'],
+                        params['analysis_start_date'],
+                        params['analysis_end_date'],
                         params['investment_duration'],
                         params['freq_type'],
                         params['freq_param'],
                         params['amount'],
-                        params['sampling'],
-                        params['realistic_params']
+                        params['realistic_params'],
+                        sampling=sampling,
+                        progress_callback=update_progress
                     )
+                    
+                    if len(results) == 0:
+                        st.warning("没有找到有效的分析结果！请检查参数设置。")
+                    else:
+                        stats = calculate_probability_statistics(results, params['realistic_params'])
+                        
+                        progress_bar.progress(100)
+                        status_text.text(f"分析完成！共 {len(results)} 次模拟")
+                        
+                        display_probability_analysis_results(
+                            stats,
+                            results,
+                            params['investment_duration'],
+                            params['freq_type'],
+                            params['freq_param'],
+                            params['amount'],
+                            params['sampling'],
+                            params['realistic_params']
+                        )
+            
+            elif strategy_mode == '智能定投':
+                with st.spinner("正在进行智能定投概率分析..."):
+                    results = run_smart_probability_analysis(
+                        params['df'],
+                        params['analysis_start_date'],
+                        params['analysis_end_date'],
+                        params['investment_duration'],
+                        params['freq_type'],
+                        params['freq_param'],
+                        params['amount'],
+                        params['strategy_config'],
+                        params['realistic_params'],
+                        sampling=sampling,
+                        progress_callback=update_progress
+                    )
+                    
+                    if len(results) == 0:
+                        st.warning("没有找到有效的分析结果！请检查参数设置。")
+                    else:
+                        stats = calculate_probability_statistics(results, params['realistic_params'])
+                        
+                        progress_bar.progress(100)
+                        status_text.text(f"分析完成！共 {len(results)} 次模拟")
+                        
+                        display_probability_analysis_results(
+                            stats,
+                            results,
+                            params['investment_duration'],
+                            params['freq_type'],
+                            params['freq_param'],
+                            params['amount'],
+                            params['sampling'],
+                            params['realistic_params']
+                        )
+            
+            elif strategy_mode == '策略对比':
+                with st.spinner("正在进行策略对比概率分析..."):
+                    fixed_results, smart_results = run_comparison_probability_analysis(
+                        params['df'],
+                        params['analysis_start_date'],
+                        params['analysis_end_date'],
+                        params['investment_duration'],
+                        params['freq_type'],
+                        params['freq_param'],
+                        params['amount'],
+                        params['strategy_config'],
+                        params['realistic_params'],
+                        sampling=sampling,
+                        progress_callback=update_progress
+                    )
+                    
+                    if len(fixed_results) == 0:
+                        st.warning("没有找到有效的分析结果！请检查参数设置。")
+                    else:
+                        comparison_stats = calculate_comparison_statistics(fixed_results, smart_results, params['realistic_params'])
+                        
+                        progress_bar.progress(100)
+                        status_text.text(f"分析完成！共 {len(fixed_results)} 次模拟")
+                        
+                        display_comparison_probability_results(
+                            comparison_stats,
+                            params['investment_duration'],
+                            params['freq_type'],
+                            params['freq_param'],
+                            params['amount'],
+                            params['sampling'],
+                            params['strategy_config'],
+                            params['realistic_params']
+                        )
     
     elif params['mode'] == 'comparison':
         if params['start_date'] >= params['end_date']:

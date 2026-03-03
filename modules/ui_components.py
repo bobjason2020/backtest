@@ -202,10 +202,10 @@ def _render_probability_analysis_ui(df, date_range):
     amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP, key="prob_amount")
     
     st.subheader("定投策略")
-    strategy_mode = st.radio("选择策略", ["固定定投", "智能定投"], horizontal=True, index=0, key="prob_strategy")
+    strategy_mode = st.radio("选择策略", ["固定定投", "智能定投", "策略对比"], horizontal=True, index=0, key="prob_strategy")
     
     strategy_config = None
-    if strategy_mode == "智能定投":
+    if strategy_mode in ["智能定投", "策略对比"]:
         strategy_config = _render_strategy_config_ui(date_range)
         strategy_config.base_amount = amount
     
@@ -1069,3 +1069,129 @@ def display_smart_investment_records(results_df):
         use_container_width=True,
         height=400
     )
+
+
+def display_comparison_probability_results(comparison_stats, investment_duration, freq_type, freq_param, 
+                                            base_amount, sampling, strategy_config, realistic_params=None):
+    from .chart_renderer import create_comparison_probability_chart, create_comparison_timeline_chart
+    
+    st.header(f"策略对比概率分析结果（定投时长: {investment_duration}年）")
+    
+    st.subheader("核心指标对比")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("固定定投盈利概率", f"{comparison_stats['fixed_profit_probability']:.1f}%")
+    with col2:
+        st.metric("智能定投盈利概率", f"{comparison_stats['smart_profit_probability']:.1f}%")
+    with col3:
+        diff = comparison_stats['smart_profit_probability'] - comparison_stats['fixed_profit_probability']
+        st.metric("盈利概率差异", f"{diff:+.1f}%")
+    
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        st.metric("固定定投平均收益", f"{comparison_stats['fixed_avg_return']:.2f}%")
+    with col5:
+        st.metric("智能定投平均收益", f"{comparison_stats['smart_avg_return']:.2f}%")
+    with col6:
+        diff = comparison_stats['smart_avg_return'] - comparison_stats['fixed_avg_return']
+        st.metric("平均收益差异", f"{diff:+.2f}%")
+    
+    col7, col8, col9 = st.columns(3)
+    with col7:
+        st.metric("固定定投中位数收益", f"{comparison_stats['fixed_median_return']:.2f}%")
+    with col8:
+        st.metric("智能定投中位数收益", f"{comparison_stats['smart_median_return']:.2f}%")
+    with col9:
+        diff = comparison_stats['smart_median_return'] - comparison_stats['fixed_median_return']
+        st.metric("中位数差异", f"{diff:+.2f}%")
+    
+    col10, col11, col12 = st.columns(3)
+    with col10:
+        st.metric("固定定投平均年化", f"{comparison_stats['fixed_avg_annualized']:.2f}%")
+    with col11:
+        st.metric("智能定投平均年化", f"{comparison_stats['smart_avg_annualized']:.2f}%")
+    with col12:
+        diff = comparison_stats['smart_avg_annualized'] - comparison_stats['fixed_avg_annualized']
+        st.metric("年化差异", f"{diff:+.2f}%")
+    
+    st.markdown("---")
+    st.subheader("智能策略胜率分析")
+    
+    col13, col14, col15 = st.columns(3)
+    with col13:
+        st.metric("智能策略胜率", f"{comparison_stats['smart_win_rate']:.1f}%", 
+                  help=f"在 {comparison_stats['total_count']} 次模拟中，智能定投收益超过固定定投的次数为 {comparison_stats['smart_win_count']} 次")
+    with col14:
+        st.metric("平均收益提升", f"{comparison_stats['avg_return_diff']:+.2f}%")
+    with col15:
+        st.metric("平均年化提升", f"{comparison_stats['avg_annualized_diff']:+.2f}%")
+    
+    st.markdown("---")
+    st.subheader("投入金额对比")
+    
+    col16, col17, col18 = st.columns(3)
+    with col16:
+        st.metric("固定定投平均投入", f"¥{comparison_stats['fixed_avg_investment']:,.0f}")
+    with col17:
+        st.metric("智能定投平均投入", f"¥{comparison_stats['smart_avg_investment']:,.0f}")
+    with col18:
+        diff = comparison_stats['smart_avg_investment'] - comparison_stats['fixed_avg_investment']
+        pct = diff / comparison_stats['fixed_avg_investment'] * 100 if comparison_stats['fixed_avg_investment'] > 0 else 0
+        st.metric("投入差异", f"¥{diff:,.0f}", f"{pct:+.1f}%")
+    
+    st.markdown("---")
+    st.subheader("收益分布对比")
+    fig_dist = create_comparison_probability_chart(comparison_stats, realistic_params)
+    st.plotly_chart(fig_dist, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("收益差异随起始日期变化")
+    fig_timeline = create_comparison_timeline_chart(comparison_stats, realistic_params)
+    st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("分析参数")
+    st.write(f"- 定投时长: {investment_duration}年")
+    st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
+    st.write(f"- 基础定投金额: ¥{base_amount:,.0f}")
+    st.write(f"- 采样方式: {sampling}")
+    st.write(f"- 模拟次数: {comparison_stats['total_count']}次")
+    st.write(f"- 策略类型: {strategy_config.strategy_type}")
+    
+    st.markdown("---")
+    with st.expander("查看详细数据"):
+        col_detail1, col_detail2 = st.columns(2)
+        with col_detail1:
+            st.markdown("**固定定投结果**")
+            fixed_df = comparison_stats['fixed_results_df'].copy()
+            fixed_df['起始日期'] = fixed_df['start_date'].astype(str)
+            fixed_df['结束日期'] = fixed_df['end_date'].astype(str)
+            if realistic_params:
+                display_cols = ['起始日期', '结束日期', 'investment_count', 'total_investment', 
+                               'real_total_return', 'real_annualized']
+                fixed_df['累计收益率(%)'] = fixed_df['real_total_return'].round(2)
+                fixed_df['年化收益率(%)'] = fixed_df['real_annualized'].round(2)
+            else:
+                display_cols = ['起始日期', '结束日期', 'investment_count', 'total_investment', 
+                               'ideal_total_return', 'ideal_annualized']
+                fixed_df['累计收益率(%)'] = fixed_df['ideal_total_return'].round(2)
+                fixed_df['年化收益率(%)'] = fixed_df['ideal_annualized'].round(2)
+            fixed_df['累计投入'] = fixed_df['total_investment'].apply(lambda x: f"¥{x:,.0f}")
+            st.dataframe(fixed_df[['起始日期', '结束日期', 'investment_count', '累计投入', '累计收益率(%)', '年化收益率(%)']], 
+                        use_container_width=True, height=300)
+        
+        with col_detail2:
+            st.markdown("**智能定投结果**")
+            smart_df = comparison_stats['smart_results_df'].copy()
+            smart_df['起始日期'] = smart_df['start_date'].astype(str)
+            smart_df['结束日期'] = smart_df['end_date'].astype(str)
+            if realistic_params:
+                smart_df['累计收益率(%)'] = smart_df['real_total_return'].round(2)
+                smart_df['年化收益率(%)'] = smart_df['real_annualized'].round(2)
+            else:
+                smart_df['累计收益率(%)'] = smart_df['ideal_total_return'].round(2)
+                smart_df['年化收益率(%)'] = smart_df['ideal_annualized'].round(2)
+            smart_df['累计投入'] = smart_df['total_investment'].apply(lambda x: f"¥{x:,.0f}")
+            st.dataframe(smart_df[['起始日期', '结束日期', 'investment_count', '累计投入', '累计收益率(%)', '年化收益率(%)']], 
+                        use_container_width=True, height=300)

@@ -494,3 +494,110 @@ def create_amount_distribution_chart(results_df, base_amount):
     )
     
     return fig
+
+
+def create_comparison_probability_chart(comparison_stats, realistic_params=None):
+    fig = go.Figure()
+    
+    if realistic_params:
+        return_col = 'real_total_return'
+    else:
+        return_col = 'ideal_total_return'
+    
+    fixed_df = comparison_stats['fixed_results_df']
+    smart_df = comparison_stats['smart_results_df']
+    
+    fig.add_trace(go.Histogram(
+        x=fixed_df[return_col],
+        nbinsx=30,
+        name='固定定投',
+        marker_color='#3498db',
+        opacity=0.6,
+        hovertemplate='固定定投<br>收益区间: %{x:.1f}%<br>频次: %{y}<extra></extra>'
+    ))
+    
+    fig.add_trace(go.Histogram(
+        x=smart_df[return_col],
+        nbinsx=30,
+        name='智能定投',
+        marker_color='#e74c3c',
+        opacity=0.6,
+        hovertemplate='智能定投<br>收益区间: %{x:.1f}%<br>频次: %{y}<extra></extra>'
+    ))
+    
+    fig.add_vline(x=comparison_stats['fixed_avg_return'], line_dash="dash", line_color="#2980b9", opacity=0.8,
+                  annotation_text=f"固定平均: {comparison_stats['fixed_avg_return']:.1f}%",
+                  annotation_position="top right")
+    
+    fig.add_vline(x=comparison_stats['smart_avg_return'], line_dash="dash", line_color="#c0392b", opacity=0.8,
+                  annotation_text=f"智能平均: {comparison_stats['smart_avg_return']:.1f}%",
+                  annotation_position="top left")
+    
+    fig.update_layout(
+        xaxis_title='累计收益率（%）',
+        yaxis_title='频次',
+        hovermode='x unified',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        bargap=0.05,
+        barmode='overlay'
+    )
+    
+    return fig
+
+
+def create_comparison_timeline_chart(comparison_stats, realistic_params=None):
+    fig = go.Figure()
+    
+    fixed_df = comparison_stats['fixed_results_df']
+    smart_df = comparison_stats['smart_results_df']
+    
+    if realistic_params:
+        return_col = 'real_total_return'
+    else:
+        return_col = 'ideal_total_return'
+    
+    fig.add_trace(go.Scatter(
+        x=fixed_df['start_date'],
+        y=fixed_df[return_col],
+        mode='lines+markers',
+        name='固定定投',
+        line=dict(color='#3498db', width=1.5),
+        marker=dict(size=4),
+        hovertemplate='日期: %{x}<br>固定定投收益: %{y:.2f}%<extra></extra>'
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=smart_df['start_date'],
+        y=smart_df[return_col],
+        mode='lines+markers',
+        name='智能定投',
+        line=dict(color='#e74c3c', width=1.5),
+        marker=dict(size=4),
+        hovertemplate='日期: %{x}<br>智能定投收益: %{y:.2f}%<extra></extra>'
+    ))
+    
+    return_diff = comparison_stats['return_diff']
+    smart_win = [1 if d > 0 else 0 for d in return_diff]
+    
+    fig.add_trace(go.Bar(
+        x=fixed_df['start_date'],
+        y=return_diff,
+        name='收益差异',
+        marker_color=['#27ae60' if d > 0 else '#e74c3c' for d in return_diff],
+        opacity=0.3,
+        hovertemplate='日期: %{x}<br>收益差异: %{y:.2f}%<extra></extra>'
+    ))
+    
+    fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        xaxis_title='起始日期',
+        yaxis_title='累计收益率（%）',
+        hovermode='x unified',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    return fig

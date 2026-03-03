@@ -3,7 +3,8 @@ import numpy as np
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
-from .investment import get_investment_dates, run_backtest_calculation
+from .investment import get_investment_dates, run_backtest_calculation, run_smart_backtest_calculation
+from .smart_strategy import SmartStrategyConfig, create_strategy
 
 
 def get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years):
@@ -249,4 +250,254 @@ def calculate_probability_statistics(results, realistic_params=None):
         'avg_total_investment': avg_total_investment,
         'avg_years': avg_years,
         'results_df': df
+    }
+
+
+def run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, 
+                               base_amount, strategy_config, realistic_params=None):
+    duration_days = int(investment_duration_years * 365)
+    end_date = start_date + timedelta(days=duration_days)
+    
+    trading_dates = set(df['日期'].dt.date)
+    actual_end_date = end_date
+    while actual_end_date not in trading_dates and actual_end_date <= df['日期'].max().date():
+        actual_end_date += timedelta(days=1)
+    
+    investment_dates = get_investment_dates(df, start_date, actual_end_date, freq_type, freq_param)
+    
+    if len(investment_dates) == 0:
+        return None
+    
+    results_df, total_shares_ideal, total_investment, total_purchase_fee = run_smart_backtest_calculation(
+        df, investment_dates, base_amount, strategy_config, realistic_params
+    )
+    
+    if len(results_df) == 0:
+        return None
+    
+    df_date_col = df.copy()
+    df_date_col['日期_date'] = df_date_col['日期'].dt.date
+    
+    end_row = df_date_col[df_date_col['日期_date'] == actual_end_date]
+    if len(end_row) == 0:
+        end_row = df_date_col[df_date_col['日期_date'] <= actual_end_date].tail(1)
+    
+    if len(end_row) == 0:
+        return None
+    
+    end_price = end_row['收盘价'].values[0]
+    
+    ideal_final_asset = total_shares_ideal * end_price
+    ideal_total_return = (ideal_final_asset - total_investment) / total_investment * 100 if total_investment > 0 else 0
+    
+    actual_years = (actual_end_date - start_date).days / 365.0
+    
+    if actual_years > 0 and ideal_total_return > -100:
+        ideal_annualized = ((1 + ideal_total_return / 100) ** (1 / actual_years) - 1) * 100
+    else:
+        ideal_annualized = 0
+    
+    real_final_asset = ideal_final_asset
+    real_total_return = ideal_total_return
+    real_annualized = ideal_annualized
+    total_fees = total_purchase_fee
+    
+    if realistic_params:
+        management_fee_rate = realistic_params.get('management_fee', 0)
+        custody_fee_rate = realistic_params.get('custody_fee', 0)
+        cash_ratio = realistic_params.get('cash_ratio', 0)
+        tracking_error = realistic_params.get('tracking_error', 0)
+        tracking_error_mode = realistic_params.get('tracking_error_mode', "固定折扣")
+        redemption_fee_rate = realistic_params.get('redemption_fee', 0)
+        
+        daily_fee_rate = (management_fee_rate + custody_fee_rate) / 365
+        total_days = (actual_end_date - start_date).days
+        
+        fee_reduction_factor = 1 - daily_fee_rate * total_days / 2
+        real_shares = total_shares_ideal * fee_reduction_factor
+        
+        from .fee_calculator import apply_tracking_error
+        effective_price = apply_tracking_error(end_price, tracking_error, tracking_error_mode)
+        
+        stock_asset = real_shares * effective_price * (1 - cash_ratio)
+        cash_asset = total_investment * cash_ratio
+        real_final_asset = stock_asset + cash_asset
+        
+        redemption_fee = real_final_asset * redemption_fee_rate
+        real_final_asset -= redemption_fee
+        
+        total_management_fee = total_shares_ideal * (1 - fee_reduction_factor) * end_price
+        total_fees = total_purchase_fee + total_management_fee + redemption_fee
+        
+        real_total_return = (real_final_asset - total_investment) / total_investment * 100 if total_investment > 0 else 0
+        
+        if actual_years > 0 and real_total_return > -100:
+            real_annualized = ((1 + real_total_return / 100) ** (1 / actual_years) - 1) * 100
+        else:
+            real_annualized = 0
+    
+    return {
+        'start_date': start_date,
+        'end_date': actual_end_date,
+        'investment_count': len(investment_dates),
+        'total_investment': total_investment,
+        'ideal_final_asset': ideal_final_asset,
+        'ideal_total_return': ideal_total_return,
+        'ideal_annualized': ideal_annualized,
+        'real_final_asset': real_final_asset,
+        'real_total_return': real_total_return,
+        'real_annualized': real_annualized,
+        'total_fees': total_fees,
+        'actual_years': actual_years
+    }
+
+
+def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                    freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
+                                    sampling='monthly', progress_callback=None):
+    start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
+    
+    if sampling == 'monthly':
+        sampled_dates = []
+        current_year = None
+        current_month = None
+        for date in start_dates:
+            if date.year != current_year or date.month != current_month:
+                sampled_dates.append(date)
+                current_year = date.year
+                current_month = date.month
+        start_dates = sampled_dates
+    elif sampling == 'weekly':
+        sampled_dates = []
+        last_date = None
+        for date in start_dates:
+            if last_date is None or (date - last_date).days >= 7:
+                sampled_dates.append(date)
+                last_date = date
+        start_dates = sampled_dates
+    
+    results = []
+    total = len(start_dates)
+    
+    for i, start_date in enumerate(start_dates):
+        result = run_single_smart_backtest(
+            df, start_date, investment_duration_years, freq_type, freq_param, 
+            base_amount, strategy_config, realistic_params
+        )
+        if result is not None:
+            results.append(result)
+        
+        if progress_callback and (i + 1) % max(1, total // 100) == 0:
+            progress_callback(i + 1, total)
+    
+    return results
+
+
+def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                         freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
+                                         sampling='monthly', progress_callback=None):
+    start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
+    
+    if sampling == 'monthly':
+        sampled_dates = []
+        current_year = None
+        current_month = None
+        for date in start_dates:
+            if date.year != current_year or date.month != current_month:
+                sampled_dates.append(date)
+                current_year = date.year
+                current_month = date.month
+        start_dates = sampled_dates
+    elif sampling == 'weekly':
+        sampled_dates = []
+        last_date = None
+        for date in start_dates:
+            if last_date is None or (date - last_date).days >= 7:
+                sampled_dates.append(date)
+                last_date = date
+        start_dates = sampled_dates
+    
+    fixed_results = []
+    smart_results = []
+    total = len(start_dates)
+    
+    for i, start_date in enumerate(start_dates):
+        fixed_result = run_single_backtest(
+            df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params
+        )
+        smart_result = run_single_smart_backtest(
+            df, start_date, investment_duration_years, freq_type, freq_param, 
+            base_amount, strategy_config, realistic_params
+        )
+        
+        if fixed_result is not None and smart_result is not None:
+            fixed_results.append(fixed_result)
+            smart_results.append(smart_result)
+        
+        if progress_callback and (i + 1) % max(1, total // 100) == 0:
+            progress_callback(i + 1, total)
+    
+    return fixed_results, smart_results
+
+
+def calculate_comparison_statistics(fixed_results, smart_results, realistic_params=None):
+    if not fixed_results or not smart_results:
+        return None
+    
+    fixed_df = pd.DataFrame(fixed_results)
+    smart_df = pd.DataFrame(smart_results)
+    
+    if realistic_params:
+        return_col = 'real_total_return'
+        annualized_col = 'real_annualized'
+    else:
+        return_col = 'ideal_total_return'
+        annualized_col = 'ideal_annualized'
+    
+    total_count = len(fixed_df)
+    
+    fixed_profit_prob = (fixed_df[return_col] > 0).sum() / total_count * 100
+    smart_profit_prob = (smart_df[return_col] > 0).sum() / total_count * 100
+    
+    fixed_avg_return = fixed_df[return_col].mean()
+    smart_avg_return = smart_df[return_col].mean()
+    
+    fixed_median_return = fixed_df[return_col].median()
+    smart_median_return = smart_df[return_col].median()
+    
+    fixed_avg_annualized = fixed_df[annualized_col].mean()
+    smart_avg_annualized = smart_df[annualized_col].mean()
+    
+    fixed_avg_investment = fixed_df['total_investment'].mean()
+    smart_avg_investment = smart_df['total_investment'].mean()
+    
+    return_diff = smart_df[return_col].values - fixed_df[return_col].values
+    annualized_diff = smart_df[annualized_col].values - fixed_df[annualized_col].values
+    
+    smart_win_count = (return_diff > 0).sum()
+    smart_win_rate = smart_win_count / total_count * 100
+    
+    avg_return_diff = np.mean(return_diff)
+    avg_annualized_diff = np.mean(annualized_diff)
+    
+    return {
+        'total_count': total_count,
+        'fixed_profit_probability': fixed_profit_prob,
+        'smart_profit_probability': smart_profit_prob,
+        'fixed_avg_return': fixed_avg_return,
+        'smart_avg_return': smart_avg_return,
+        'fixed_median_return': fixed_median_return,
+        'smart_median_return': smart_median_return,
+        'fixed_avg_annualized': fixed_avg_annualized,
+        'smart_avg_annualized': smart_avg_annualized,
+        'fixed_avg_investment': fixed_avg_investment,
+        'smart_avg_investment': smart_avg_investment,
+        'smart_win_rate': smart_win_rate,
+        'smart_win_count': smart_win_count,
+        'avg_return_diff': avg_return_diff,
+        'avg_annualized_diff': avg_annualized_diff,
+        'fixed_results_df': fixed_df,
+        'smart_results_df': smart_df,
+        'return_diff': return_diff.tolist(),
+        'annualized_diff': annualized_diff.tolist()
     }

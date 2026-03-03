@@ -77,12 +77,10 @@ def run_single_backtest(df, start_date, investment_duration_years, freq_type, fr
     if len(results_df) == 0:
         return None
     
-    df_date_col = df.copy()
-    df_date_col['日期_date'] = df_date_col['日期'].dt.date
-    
-    end_row = df_date_col[df_date_col['日期_date'] == actual_end_date]
+    dates = df['日期'].dt.date
+    end_row = df[dates == actual_end_date]
     if len(end_row) == 0:
-        end_row = df_date_col[df_date_col['日期_date'] <= actual_end_date].tail(1)
+        end_row = df[dates <= actual_end_date].tail(1)
     
     if len(end_row) == 0:
         return None
@@ -316,12 +314,10 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
     if len(results_df) == 0:
         return None
     
-    df_date_col = df.copy()
-    df_date_col['日期_date'] = df_date_col['日期'].dt.date
-    
-    end_row = df_date_col[df_date_col['日期_date'] == actual_end_date]
+    dates = df['日期'].dt.date
+    end_row = df[dates == actual_end_date]
     if len(end_row) == 0:
-        end_row = df_date_col[df_date_col['日期_date'] <= actual_end_date].tail(1)
+        end_row = df[dates <= actual_end_date].tail(1)
     
     if len(end_row) == 0:
         return None

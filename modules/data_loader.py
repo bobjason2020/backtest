@@ -21,15 +21,34 @@ def validate_data(df):
     return True, None
 
 
+def check_valuation_data(df):
+    has_pe = 'PE' in df.columns
+    has_pb = 'PB' in df.columns
+    valuation_columns = []
+    if has_pe:
+        valuation_columns.append('PE')
+    if has_pb:
+        valuation_columns.append('PB')
+    return {
+        'has_valuation': has_pe or has_pb,
+        'valuation_columns': valuation_columns,
+        'has_pe': has_pe,
+        'has_pb': has_pb
+    }
+
+
 def get_date_range(df):
     min_date = df['日期'].min().date()
     max_date = df['日期'].max().date()
     total_days = (max_date - min_date).days
     max_years = total_days / 365.0
+    valuation_info = check_valuation_data(df)
     return {
         'min_date': min_date,
         'max_date': max_date,
         'total_days': total_days,
         'max_years': max_years,
-        'record_count': len(df)
+        'record_count': len(df),
+        'has_valuation': valuation_info['has_valuation'],
+        'valuation_columns': valuation_info['valuation_columns']
     }

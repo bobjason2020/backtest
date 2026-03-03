@@ -355,3 +355,142 @@ def create_annualized_distribution_chart(stats, realistic_params=None):
     )
     
     return fig
+
+
+def create_comparison_chart(fixed_df, smart_df, realistic_params=None):
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=fixed_df['日期'],
+        y=fixed_df['累计投入'],
+        mode='lines',
+        name='固定定投-累计投入',
+        line=dict(color='blue', width=2, dash='dash'),
+        hovertemplate='日期: %{x}<br>固定投入: ¥%{y:,.2f}<extra></extra>'
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=smart_df['日期'],
+        y=smart_df['累计投入'],
+        mode='lines',
+        name='智能定投-累计投入',
+        line=dict(color='blue', width=2),
+        hovertemplate='日期: %{x}<br>智能投入: ¥%{y:,.2f}<extra></extra>'
+    ))
+    
+    if realistic_params:
+        fig.add_trace(go.Scatter(
+            x=fixed_df['日期'],
+            y=fixed_df['实际持仓市值'],
+            mode='lines',
+            name='固定定投-持仓市值',
+            line=dict(color='green', width=2, dash='dash'),
+            hovertemplate='日期: %{x}<br>固定市值: ¥%{y:,.2f}<extra></extra>'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=smart_df['日期'],
+            y=smart_df['实际持仓市值'],
+            mode='lines',
+            name='智能定投-持仓市值',
+            line=dict(color='red', width=2),
+            hovertemplate='日期: %{x}<br>智能市值: ¥%{y:,.2f}<extra></extra>'
+        ))
+    else:
+        fig.add_trace(go.Scatter(
+            x=fixed_df['日期'],
+            y=fixed_df['理想持仓市值'],
+            mode='lines',
+            name='固定定投-持仓市值',
+            line=dict(color='green', width=2, dash='dash'),
+            hovertemplate='日期: %{x}<br>固定市值: ¥%{y:,.2f}<extra></extra>'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=smart_df['日期'],
+            y=smart_df['理想持仓市值'],
+            mode='lines',
+            name='智能定投-持仓市值',
+            line=dict(color='red', width=2),
+            hovertemplate='日期: %{x}<br>智能市值: ¥%{y:,.2f}<extra></extra>'
+        ))
+    
+    fig.update_layout(
+        xaxis_title='日期',
+        yaxis_title='金额（元）',
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN
+    )
+    
+    return fig
+
+
+def create_strategy_signal_chart(results_df):
+    fig = go.Figure()
+    
+    signal_colors = {
+        'extreme_low': 'darkgreen',
+        'low': 'green',
+        'normal': 'gray',
+        'high': 'orange',
+        'extreme_high': 'red'
+    }
+    
+    colors = [signal_colors.get(s, 'gray') for s in results_df['信号']]
+    
+    fig.add_trace(go.Bar(
+        x=results_df['日期'],
+        y=results_df['倍数'],
+        name='定投倍数',
+        marker_color=colors,
+        opacity=0.8,
+        hovertemplate='日期: %{x}<br>倍数: %{y:.2f}x<extra></extra>'
+    ))
+    
+    fig.add_hline(y=1.0, line_dash="dash", line_color="black", opacity=0.5)
+    
+    fig.update_layout(
+        xaxis_title='日期',
+        yaxis_title='定投倍数',
+        hovermode='x',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        showlegend=False
+    )
+    
+    return fig
+
+
+def create_amount_distribution_chart(results_df, base_amount):
+    fig = go.Figure()
+    
+    fig.add_trace(go.Histogram(
+        x=results_df['投入金额'],
+        nbinsx=20,
+        name='金额分布',
+        marker_color='steelblue',
+        opacity=0.75,
+        hovertemplate='金额区间: ¥%{x:,.0f}<br>频次: %{y}<extra></extra>'
+    ))
+    
+    fig.add_vline(x=base_amount, line_dash="dash", line_color="red", opacity=0.7,
+                  annotation_text=f"基础金额: ¥{base_amount:,.0f}",
+                  annotation_position="top right")
+    
+    avg_amount = results_df['投入金额'].mean()
+    fig.add_vline(x=avg_amount, line_dash="dot", line_color="green", opacity=0.7,
+                  annotation_text=f"平均金额: ¥{avg_amount:,.0f}",
+                  annotation_position="top left")
+    
+    fig.update_layout(
+        xaxis_title='定投金额（元）',
+        yaxis_title='频次',
+        hovermode='x',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        bargap=0.05
+    )
+    
+    return fig

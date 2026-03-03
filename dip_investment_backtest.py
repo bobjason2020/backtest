@@ -250,7 +250,7 @@ if params['df'] is not None and params['run_backtest']:
                         comparison_stats = calculate_comparison_statistics(fixed_results, smart_results, params['realistic_params'])
                         
                         progress_bar.progress(100)
-                        status_text.text(f"分析完成！共 {len(fixed_results)} 次模拟")
+                        status_text.text(f"分析完成！共 {len(fixed_results)} 次模拟，耗时 {elapsed_time:.1f} 秒")
                         
                         display_comparison_probability_results(
                             comparison_stats,

@@ -205,7 +205,7 @@ def calculate_daily_assets(df, investment_dates, amount, realistic_params=None):
             running_shares_real = running_shares_ideal
         
         daily_records.append({
-            '日期': row['日期'],
+            '日期': df['日期'].iloc[idx],
             '收盘价': close_price,
             '累计投入': running_investment,
             '理想持仓份额': running_shares_ideal,
@@ -367,7 +367,7 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
             running_shares_real = running_shares_ideal
         
         daily_records.append({
-            '日期': row['日期'],
+            '日期': df['日期'].iloc[idx],
             '收盘价': close_price,
             '累计投入': running_investment,
             '理想持仓份额': running_shares_ideal,

@@ -651,7 +651,23 @@ def _render_strategy_config_ui(date_range):
             
             all_presets = get_all_presets()
             preset_options = list(all_presets.keys()) + ["自定义", "保存当前参数..."]
-            selected_preset = st.selectbox("预设参数", preset_options, key="ma_preset_select", help="选择预设参数或自定义")
+            
+            def on_preset_change():
+                selected = st.session_state.ma_preset_select
+                if selected in all_presets:
+                    preset = all_presets[selected]
+                    st.session_state.ma_period_val = preset.get("ma_period", DEFAULT_MA_PERIOD)
+                    st.session_state.extreme_high_val = preset.get("extreme_high_threshold", DEFAULT_EXTREME_HIGH_THRESHOLD)
+                    st.session_state.extreme_high_m_val = preset.get("extreme_high_multiplier", DEFAULT_EXTREME_HIGH_MULTIPLIER)
+                    st.session_state.high_val = preset.get("high_threshold", DEFAULT_HIGH_THRESHOLD)
+                    st.session_state.high_m_val = preset.get("high_multiplier", DEFAULT_HIGH_MULTIPLIER)
+                    st.session_state.normal_m_val = preset.get("normal_multiplier", DEFAULT_NORMAL_MULTIPLIER)
+                    st.session_state.low_val = preset.get("low_threshold", DEFAULT_LOW_THRESHOLD)
+                    st.session_state.low_m_val = preset.get("low_multiplier", DEFAULT_LOW_MULTIPLIER)
+                    st.session_state.extreme_low_val = preset.get("extreme_low_threshold", DEFAULT_EXTREME_LOW_THRESHOLD)
+                    st.session_state.extreme_low_m_val = preset.get("extreme_low_multiplier", DEFAULT_EXTREME_LOW_MULTIPLIER)
+            
+            selected_preset = st.selectbox("预设参数", preset_options, key="ma_preset_select", help="选择预设参数或自定义", on_change=on_preset_change)
             
             if selected_preset == "保存当前参数...":
                 preset_name = st.text_input("参数名称", key="preset_name_input", placeholder="输入参数名称")
@@ -672,29 +688,16 @@ def _render_strategy_config_ui(date_range):
                     st.success(f"已保存参数: {preset_name}")
                     st.rerun()
             
-            if selected_preset in all_presets:
-                preset = all_presets[selected_preset]
-                default_ma = preset.get("ma_period", DEFAULT_MA_PERIOD)
-                default_extreme_high = preset.get("extreme_high_threshold", DEFAULT_EXTREME_HIGH_THRESHOLD)
-                default_extreme_high_m = preset.get("extreme_high_multiplier", DEFAULT_EXTREME_HIGH_MULTIPLIER)
-                default_high = preset.get("high_threshold", DEFAULT_HIGH_THRESHOLD)
-                default_high_m = preset.get("high_multiplier", DEFAULT_HIGH_MULTIPLIER)
-                default_normal_m = preset.get("normal_multiplier", DEFAULT_NORMAL_MULTIPLIER)
-                default_low = preset.get("low_threshold", DEFAULT_LOW_THRESHOLD)
-                default_low_m = preset.get("low_multiplier", DEFAULT_LOW_MULTIPLIER)
-                default_extreme_low = preset.get("extreme_low_threshold", DEFAULT_EXTREME_LOW_THRESHOLD)
-                default_extreme_low_m = preset.get("extreme_low_multiplier", DEFAULT_EXTREME_LOW_MULTIPLIER)
-            else:
-                default_ma = DEFAULT_MA_PERIOD
-                default_extreme_high = DEFAULT_EXTREME_HIGH_THRESHOLD
-                default_extreme_high_m = DEFAULT_EXTREME_HIGH_MULTIPLIER
-                default_high = DEFAULT_HIGH_THRESHOLD
-                default_high_m = DEFAULT_HIGH_MULTIPLIER
-                default_normal_m = DEFAULT_NORMAL_MULTIPLIER
-                default_low = DEFAULT_LOW_THRESHOLD
-                default_low_m = DEFAULT_LOW_MULTIPLIER
-                default_extreme_low = DEFAULT_EXTREME_LOW_THRESHOLD
-                default_extreme_low_m = DEFAULT_EXTREME_LOW_MULTIPLIER
+            default_ma = st.session_state.get("ma_period_val", DEFAULT_MA_PERIOD)
+            default_extreme_high = st.session_state.get("extreme_high_val", DEFAULT_EXTREME_HIGH_THRESHOLD)
+            default_extreme_high_m = st.session_state.get("extreme_high_m_val", DEFAULT_EXTREME_HIGH_MULTIPLIER)
+            default_high = st.session_state.get("high_val", DEFAULT_HIGH_THRESHOLD)
+            default_high_m = st.session_state.get("high_m_val", DEFAULT_HIGH_MULTIPLIER)
+            default_normal_m = st.session_state.get("normal_m_val", DEFAULT_NORMAL_MULTIPLIER)
+            default_low = st.session_state.get("low_val", DEFAULT_LOW_THRESHOLD)
+            default_low_m = st.session_state.get("low_m_val", DEFAULT_LOW_MULTIPLIER)
+            default_extreme_low = st.session_state.get("extreme_low_val", DEFAULT_EXTREME_LOW_THRESHOLD)
+            default_extreme_low_m = st.session_state.get("extreme_low_m_val", DEFAULT_EXTREME_LOW_MULTIPLIER)
             
             col1, col2 = st.columns(2)
             with col1:

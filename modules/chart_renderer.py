@@ -570,8 +570,8 @@ def create_comparison_probability_chart(comparison_stats, realistic_params=None)
 def create_comparison_timeline_chart(comparison_stats, realistic_params=None):
     fig = go.Figure()
     
-    fixed_df = comparison_stats['fixed_results_df']
-    smart_df = comparison_stats['smart_results_df']
+    fixed_df = comparison_stats['fixed_results_df'].sort_values('start_date').reset_index(drop=True)
+    smart_df = comparison_stats['smart_results_df'].sort_values('start_date').reset_index(drop=True)
     
     if realistic_params:
         return_col = 'real_total_return'

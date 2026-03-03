@@ -68,16 +68,14 @@ def render_sidebar():
             st.success(f"数据加载成功！\n共 {date_range['record_count']} 条记录\n日期范围: {date_range['min_date']} ~ {date_range['max_date']}{valuation_info}")
             
             st.subheader("分析模式")
-            mode = st.radio("选择模式", ["单次回测", "概率分析", "策略对比"], horizontal=True)
-            mode_map = {"单次回测": "single", "概率分析": "probability", "策略对比": "comparison"}
+            mode = st.radio("选择模式", ["单次回测", "概率分析"], horizontal=True)
+            mode_map = {"单次回测": "single", "概率分析": "probability"}
             params['mode'] = mode_map.get(mode, "single")
             
             if params['mode'] == 'single':
                 params.update(_render_single_backtest_ui(df, date_range))
-            elif params['mode'] == 'probability':
-                params.update(_render_probability_analysis_ui(df, date_range))
             else:
-                params.update(_render_comparison_ui(df, date_range))
+                params.update(_render_probability_analysis_ui(df, date_range))
         else:
             st.info("请上传 Excel 数据文件")
         
@@ -140,14 +138,17 @@ def _render_single_backtest_ui(df, date_range):
         freq_param = st.selectbox("选择定投日", MONTH_OPTIONS, index=0)
     
     st.subheader("定投策略")
-    strategy_mode = st.radio("选择策略", ["固定定投", "智能定投"], horizontal=True, index=0)
+    strategy_mode = st.radio("选择策略", ["固定定投", "智能定投", "策略对比"], horizontal=True, index=0)
     
     strategy_config = None
-    if strategy_mode == "智能定投":
+    if strategy_mode in ["智能定投", "策略对比"]:
         strategy_config = _render_strategy_config_ui(date_range)
     
     st.subheader("定投金额")
     amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP)
+    
+    if strategy_config:
+        strategy_config.base_amount = amount
     
     realistic_params = _render_realistic_params()
     

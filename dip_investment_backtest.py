@@ -50,7 +50,8 @@ if params['df'] is not None and params['run_backtest']:
                             investment_dates,
                             params['amount'],
                             params['strategy_config'],
-                            params['realistic_params']
+                            params['realistic_params'],
+                            use_cash_flow=True
                         )
                         
                         fixed_daily_df = comparison_data['fixed']['daily_df']
@@ -75,7 +76,8 @@ if params['df'] is not None and params['run_backtest']:
                             params['freq_param'],
                             params['amount'],
                             params['strategy_config'],
-                            params['realistic_params']
+                            params['realistic_params'],
+                            use_cash_flow=True
                         )
             else:
                 with st.spinner("正在计算回测结果..."):
@@ -241,13 +243,14 @@ if params['df'] is not None and params['run_backtest']:
                         params['strategy_config'],
                         params['realistic_params'],
                         sampling=sampling,
-                        progress_callback=update_progress
+                        progress_callback=update_progress,
+                        use_cash_flow=True
                     )
                     
                     if len(fixed_results) == 0:
                         st.warning("没有找到有效的分析结果！请检查参数设置。")
                     else:
-                        comparison_stats = calculate_comparison_statistics(fixed_results, smart_results, params['realistic_params'])
+                        comparison_stats = calculate_comparison_statistics(fixed_results, smart_results, params['realistic_params'], use_cash_flow=True)
                         
                         progress_bar.progress(100)
                         status_text.text(f"分析完成！共 {len(fixed_results)} 次模拟，耗时 {elapsed_time:.1f} 秒")
@@ -260,7 +263,8 @@ if params['df'] is not None and params['run_backtest']:
                             params['amount'],
                             params['sampling'],
                             params['strategy_config'],
-                            params['realistic_params']
+                            params['realistic_params'],
+                            use_cash_flow=True
                         )
     
 elif params['df'] is not None and not params['run_backtest']:

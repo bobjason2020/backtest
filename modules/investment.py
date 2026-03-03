@@ -5,6 +5,7 @@ from datetime import timedelta
 from .config import WEEKDAY_MAP
 from .fee_calculator import calculate_purchase_fee, apply_tracking_error
 from .smart_strategy import SmartStrategyConfig, create_strategy, StrategySignal
+from .cash_flow import CashFlowAccount
 
 
 def get_investment_dates(df, start_date, end_date, freq_type, freq_param):
@@ -241,15 +242,17 @@ def calculate_lump_sum_return(df, start_date, end_date):
     return total_return, annualized
 
 
-def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_config, realistic_params=None):
+def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_config, realistic_params=None, use_cash_flow=True):
     dates = df['日期'].dt.date
     
     strategy = create_strategy(strategy_config)
+    cash_account = CashFlowAccount() if use_cash_flow else None
     
     results = []
     total_shares = 0
     total_investment = 0
     total_purchase_fee = 0
+    total_deposited = 0
     
     purchase_fee_rate = 0
     if realistic_params:
@@ -261,7 +264,17 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
             close_price = row['收盘价'].values[0]
             
             signal = strategy.calculate_signal(df, inv_date)
-            actual_amount_raw = base_amount * signal.multiplier
+            requested_amount = base_amount * signal.multiplier
+            
+            if use_cash_flow and cash_account:
+                cash_account.deposit(base_amount)
+                total_deposited += base_amount
+                
+                actual_amount_raw = cash_account.get_available_amount(requested_amount)
+                if actual_amount_raw > 0:
+                    cash_account.withdraw(actual_amount_raw)
+            else:
+                actual_amount_raw = requested_amount
             
             actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
             purchase_fee = actual_amount_raw * purchase_fee_rate
@@ -276,6 +289,7 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
                 '收盘价': close_price,
                 '信号': signal.signal,
                 '倍数': signal.multiplier,
+                '期望投入': requested_amount,
                 '投入金额': actual_amount_raw,
                 '申购费用': purchase_fee,
                 '实际买入金额': actual_amount,
@@ -286,13 +300,17 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
                 '原因': signal.reason
             })
     
-    return pd.DataFrame(results), total_shares, total_investment, total_purchase_fee
+    cash_balance = cash_account.balance if cash_account else 0
+    total_deposited = total_deposited if use_cash_flow else total_investment
+    
+    return pd.DataFrame(results), total_shares, total_investment, total_purchase_fee, total_deposited, cash_balance
 
 
-def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_config, realistic_params=None):
+def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_config, realistic_params=None, use_cash_flow=True):
     dates = df['日期'].dt.date
     
     strategy = create_strategy(strategy_config)
+    cash_account = CashFlowAccount() if use_cash_flow else None
     
     purchase_fee_rate = 0
     management_fee_rate = 0
@@ -310,13 +328,25 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
         tracking_error_mode = realistic_params.get('tracking_error_mode', "固定折扣")
     
     investment_by_date = {}
+    total_deposited = 0
     
     for inv_date in investment_dates:
         row = df[dates == inv_date]
         if len(row) > 0:
             close_price = row['收盘价'].values[0]
             signal = strategy.calculate_signal(df, inv_date)
-            actual_amount_raw = base_amount * signal.multiplier
+            requested_amount = base_amount * signal.multiplier
+            
+            if use_cash_flow and cash_account:
+                cash_account.deposit(base_amount)
+                total_deposited += base_amount
+                
+                actual_amount_raw = cash_account.get_available_amount(requested_amount)
+                if actual_amount_raw > 0:
+                    cash_account.withdraw(actual_amount_raw)
+            else:
+                actual_amount_raw = requested_amount
+            
             actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
             shares = actual_amount / close_price if close_price > 0 else 0
             investment_by_date[inv_date] = {
@@ -324,7 +354,9 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
                 'shares': shares,
                 'purchase_fee': actual_amount_raw * purchase_fee_rate,
                 'signal': signal.signal,
-                'multiplier': signal.multiplier
+                'multiplier': signal.multiplier,
+                'requested': requested_amount,
+                'cash_balance': cash_account.balance if cash_account else 0
             }
     
     daily_records = []
@@ -333,6 +365,8 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
     running_shares_real = 0
     running_purchase_fee = 0
     running_management_fee = 0
+    running_deposited = 0
+    running_cash_balance = 0
     
     np.random.seed(42)
     
@@ -341,10 +375,13 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
         close_price = df['收盘价'].iloc[idx]
         
         if current_date in investment_by_date:
-            running_investment += investment_by_date[current_date]['amount']
-            running_shares_ideal += investment_by_date[current_date]['shares']
-            running_shares_real += investment_by_date[current_date]['shares']
-            running_purchase_fee += investment_by_date[current_date]['purchase_fee']
+            inv_data = investment_by_date[current_date]
+            running_investment += inv_data['amount']
+            running_shares_ideal += inv_data['shares']
+            running_shares_real += inv_data['shares']
+            running_purchase_fee += inv_data['purchase_fee']
+            running_deposited += base_amount if use_cash_flow else inv_data['amount']
+            running_cash_balance = inv_data.get('cash_balance', 0)
         
         ideal_asset_value = running_shares_ideal * close_price
         ideal_avg_cost = running_investment / running_shares_ideal if running_shares_ideal > 0 else 0
@@ -366,10 +403,15 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
             real_avg_cost = ideal_avg_cost
             running_shares_real = running_shares_ideal
         
+        total_asset = ideal_asset_value + running_cash_balance if use_cash_flow else ideal_asset_value
+        
         daily_records.append({
             '日期': df['日期'].iloc[idx],
             '收盘价': close_price,
+            '累计存入': running_deposited if use_cash_flow else running_investment,
             '累计投入': running_investment,
+            '现金余额': running_cash_balance,
+            '总资产': total_asset,
             '理想持仓份额': running_shares_ideal,
             '实际持仓份额': running_shares_real,
             '理想持仓市值': ideal_asset_value,
@@ -380,10 +422,12 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
             '累计管理费': running_management_fee
         })
     
-    return pd.DataFrame(daily_records), investment_by_date
+    cash_balance = cash_account.balance if cash_account else 0
+    
+    return pd.DataFrame(daily_records), investment_by_date, total_deposited, cash_balance
 
 
-def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, realistic_params=None):
+def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, realistic_params=None, use_cash_flow=True):
     fixed_results_df, fixed_shares, fixed_investment, fixed_fees = run_backtest_calculation(
         df, investment_dates, base_amount, realistic_params
     )
@@ -392,12 +436,12 @@ def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, 
         df, investment_dates, base_amount, realistic_params
     )
     
-    smart_results_df, smart_shares, smart_investment, smart_fees = run_smart_backtest_calculation(
-        df, investment_dates, base_amount, strategy_config, realistic_params
+    smart_results_df, smart_shares, smart_investment, smart_fees, smart_deposited, smart_cash_balance = run_smart_backtest_calculation(
+        df, investment_dates, base_amount, strategy_config, realistic_params, use_cash_flow
     )
     
-    smart_daily_df, smart_investment_by_date = calculate_smart_daily_assets(
-        df, investment_dates, base_amount, strategy_config, realistic_params
+    smart_daily_df, smart_investment_by_date, smart_total_deposited, smart_final_cash = calculate_smart_daily_assets(
+        df, investment_dates, base_amount, strategy_config, realistic_params, use_cash_flow
     )
     
     return {
@@ -406,7 +450,8 @@ def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, 
             'daily_df': fixed_daily_df,
             'total_shares': fixed_shares,
             'total_investment': fixed_investment,
-            'total_fees': fixed_fees
+            'total_fees': fixed_fees,
+            'total_deposited': fixed_investment
         },
         'smart': {
             'results_df': smart_results_df,
@@ -414,6 +459,8 @@ def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, 
             'total_shares': smart_shares,
             'total_investment': smart_investment,
             'total_fees': smart_fees,
-            'investment_by_date': smart_investment_by_date
+            'investment_by_date': smart_investment_by_date,
+            'total_deposited': smart_deposited,
+            'cash_balance': smart_cash_balance
         }
     }

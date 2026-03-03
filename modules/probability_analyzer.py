@@ -162,14 +162,14 @@ def _run_single_backtest_wrapper(args):
 
 
 def _run_single_smart_backtest_wrapper(args):
-    df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params = args
-    return run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params)
+    df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params, use_cash_flow = args
+    return run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params, use_cash_flow)
 
 
 def _run_comparison_backtest_wrapper(args):
-    df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params = args
+    df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params, use_cash_flow = args
     fixed = run_single_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params)
-    smart = run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params)
+    smart = run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params, use_cash_flow)
     return fixed, smart
 
 
@@ -338,7 +338,7 @@ def _calculate_probability_statistics_cached(results_hash, results, params_hash,
 
 
 def run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, 
-                               base_amount, strategy_config, realistic_params=None):
+                               base_amount, strategy_config, realistic_params=None, use_cash_flow=True):
     duration_days = int(investment_duration_years * 365)
     end_date = start_date + timedelta(days=duration_days)
     
@@ -352,8 +352,8 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
     if len(investment_dates) == 0:
         return None
     
-    results_df, total_shares_ideal, total_investment, total_purchase_fee = run_smart_backtest_calculation(
-        df, investment_dates, base_amount, strategy_config, realistic_params
+    results_df, total_shares_ideal, total_investment, total_purchase_fee, total_deposited, cash_balance = run_smart_backtest_calculation(
+        df, investment_dates, base_amount, strategy_config, realistic_params, use_cash_flow
     )
     
     if len(results_df) == 0:
@@ -370,7 +370,9 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
     end_price = end_row['收盘价'].values[0]
     
     ideal_final_asset = total_shares_ideal * end_price
-    ideal_total_return = (ideal_final_asset - total_investment) / total_investment * 100 if total_investment > 0 else 0
+    
+    investment_base = total_deposited if use_cash_flow else total_investment
+    ideal_total_return = (ideal_final_asset - investment_base) / investment_base * 100 if investment_base > 0 else 0
     
     actual_years = (actual_end_date - start_date).days / 365.0
     
@@ -411,24 +413,41 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
         total_management_fee = total_shares_ideal * (1 - fee_reduction_factor) * end_price
         total_fees = total_purchase_fee + total_management_fee + redemption_fee
         
-        real_total_return = (real_final_asset - total_investment) / total_investment * 100 if total_investment > 0 else 0
+        real_total_return = (real_final_asset - investment_base) / investment_base * 100 if investment_base > 0 else 0
         
         if actual_years > 0 and real_total_return > -100:
             real_annualized = ((1 + real_total_return / 100) ** (1 / actual_years) - 1) * 100
         else:
             real_annualized = 0
     
+    if use_cash_flow:
+        total_asset_with_cash = real_final_asset + cash_balance
+        total_return_with_cash = (total_asset_with_cash - total_deposited) / total_deposited * 100 if total_deposited > 0 else 0
+        if actual_years > 0 and total_return_with_cash > -100:
+            annualized_with_cash = ((1 + total_return_with_cash / 100) ** (1 / actual_years) - 1) * 100
+        else:
+            annualized_with_cash = 0
+    else:
+        total_asset_with_cash = real_final_asset
+        total_return_with_cash = real_total_return
+        annualized_with_cash = real_annualized
+    
     return {
         'start_date': start_date,
         'end_date': actual_end_date,
         'investment_count': len(investment_dates),
         'total_investment': total_investment,
+        'total_deposited': total_deposited,
+        'cash_balance': cash_balance,
         'ideal_final_asset': ideal_final_asset,
         'ideal_total_return': ideal_total_return,
         'ideal_annualized': ideal_annualized,
         'real_final_asset': real_final_asset,
         'real_total_return': real_total_return,
         'real_annualized': real_annualized,
+        'total_asset_with_cash': total_asset_with_cash,
+        'total_return_with_cash': total_return_with_cash,
+        'annualized_with_cash': annualized_with_cash,
         'total_fees': total_fees,
         'actual_years': actual_years
     }
@@ -436,7 +455,7 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
 
 def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
                                     freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
-                                    sampling='monthly', progress_callback=None):
+                                    sampling='monthly', progress_callback=None, use_cash_flow=True):
     start_time = time.time()
     
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
@@ -472,7 +491,7 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
             future_to_date = {
                 executor.submit(_run_single_smart_backtest_wrapper, 
                                (df, start_date, investment_duration_years,
-                                freq_type, freq_param, base_amount, strategy_config, realistic_params)): start_date
+                                freq_type, freq_param, base_amount, strategy_config, realistic_params, use_cash_flow)): start_date
                 for start_date in start_dates
             }
             
@@ -488,7 +507,7 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
         for i, start_date in enumerate(start_dates):
             result = run_single_smart_backtest(
                 df, start_date, investment_duration_years, freq_type, freq_param, 
-                base_amount, strategy_config, realistic_params
+                base_amount, strategy_config, realistic_params, use_cash_flow
             )
             if result is not None:
                 results.append(result)
@@ -502,7 +521,7 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
 
 def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
                                          freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
-                                         sampling='monthly', progress_callback=None):
+                                         sampling='monthly', progress_callback=None, use_cash_flow=True):
     start_time = time.time()
     
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
@@ -539,7 +558,7 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
             future_to_date = {
                 executor.submit(_run_comparison_backtest_wrapper, 
                                (df, start_date, investment_duration_years, freq_type, freq_param, 
-                                base_amount, strategy_config, realistic_params)): start_date
+                                base_amount, strategy_config, realistic_params, use_cash_flow)): start_date
                 for start_date in start_dates
             }
             
@@ -559,7 +578,7 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
             )
             smart_result = run_single_smart_backtest(
                 df, start_date, investment_duration_years, freq_type, freq_param, 
-                base_amount, strategy_config, realistic_params
+                base_amount, strategy_config, realistic_params, use_cash_flow
             )
             
             if fixed_result is not None and smart_result is not None:
@@ -573,7 +592,7 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
     return fixed_results, smart_results, elapsed_time
 
 
-def calculate_comparison_statistics(fixed_results, smart_results, realistic_params=None):
+def calculate_comparison_statistics(fixed_results, smart_results, realistic_params=None, use_cash_flow=True):
     if not fixed_results or not smart_results:
         return None
     
@@ -581,11 +600,11 @@ def calculate_comparison_statistics(fixed_results, smart_results, realistic_para
     smart_hash = _results_to_hashable(smart_results)
     params_hash = _hash_params(realistic_params)
     
-    return _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash, fixed_results, smart_results, realistic_params)
+    return _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash, fixed_results, smart_results, realistic_params, use_cash_flow)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash, fixed_results, smart_results, realistic_params=None):
+def _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash, fixed_results, smart_results, realistic_params=None, use_cash_flow=True):
     if not fixed_results or not smart_results:
         return None
     
@@ -599,25 +618,35 @@ def _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash,
         return_col = 'ideal_total_return'
         annualized_col = 'ideal_annualized'
     
+    if use_cash_flow and 'total_return_with_cash' in smart_df.columns:
+        smart_return_col = 'total_return_with_cash'
+        smart_annualized_col = 'annualized_with_cash'
+    else:
+        smart_return_col = return_col
+        smart_annualized_col = annualized_col
+    
     total_count = len(fixed_df)
     
     fixed_profit_prob = (fixed_df[return_col] > 0).sum() / total_count * 100
-    smart_profit_prob = (smart_df[return_col] > 0).sum() / total_count * 100
+    smart_profit_prob = (smart_df[smart_return_col] > 0).sum() / total_count * 100
     
     fixed_avg_return = fixed_df[return_col].mean()
-    smart_avg_return = smart_df[return_col].mean()
+    smart_avg_return = smart_df[smart_return_col].mean()
     
     fixed_median_return = fixed_df[return_col].median()
-    smart_median_return = smart_df[return_col].median()
+    smart_median_return = smart_df[smart_return_col].median()
     
     fixed_avg_annualized = fixed_df[annualized_col].mean()
-    smart_avg_annualized = smart_df[annualized_col].mean()
+    smart_avg_annualized = smart_df[smart_annualized_col].mean()
     
     fixed_avg_investment = fixed_df['total_investment'].mean()
     smart_avg_investment = smart_df['total_investment'].mean()
     
-    return_diff = smart_df[return_col].values - fixed_df[return_col].values
-    annualized_diff = smart_df[annualized_col].values - fixed_df[annualized_col].values
+    smart_avg_deposited = smart_df['total_deposited'].mean() if 'total_deposited' in smart_df.columns else smart_avg_investment
+    smart_avg_cash_balance = smart_df['cash_balance'].mean() if 'cash_balance' in smart_df.columns else 0
+    
+    return_diff = smart_df[smart_return_col].values - fixed_df[return_col].values
+    annualized_diff = smart_df[smart_annualized_col].values - fixed_df[annualized_col].values
     
     smart_win_count = (return_diff > 0).sum()
     smart_win_rate = smart_win_count / total_count * 100
@@ -637,6 +666,8 @@ def _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash,
         'smart_avg_annualized': smart_avg_annualized,
         'fixed_avg_investment': fixed_avg_investment,
         'smart_avg_investment': smart_avg_investment,
+        'smart_avg_deposited': smart_avg_deposited,
+        'smart_avg_cash_balance': smart_avg_cash_balance,
         'smart_win_rate': smart_win_rate,
         'smart_win_count': smart_win_count,
         'avg_return_diff': avg_return_diff,

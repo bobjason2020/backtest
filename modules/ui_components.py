@@ -1015,7 +1015,7 @@ def _render_comparison_ui(df, date_range):
 
 
 def display_comparison_results(comparison_data, start_date, end_date, freq_type, freq_param, 
-                               base_amount, strategy_config, realistic_params):
+                               base_amount, strategy_config, realistic_params, use_cash_flow=True):
     from .chart_renderer import create_comparison_chart, create_strategy_signal_chart, create_amount_distribution_chart
     from .risk_analyzer import analyze_risk_metrics
     
@@ -1031,11 +1031,15 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
     
     fixed_final_asset = fixed_last_row['理想持仓市值']
     fixed_total_investment = fixed['total_investment']
-    fixed_total_return = (fixed_final_asset - fixed_total_investment) / fixed_total_investment * 100
+    fixed_total_deposited = fixed.get('total_deposited', fixed_total_investment)
+    fixed_total_return = (fixed_final_asset - fixed_total_deposited) / fixed_total_deposited * 100
     
     smart_final_asset = smart_last_row['理想持仓市值']
     smart_total_investment = smart['total_investment']
-    smart_total_return = (smart_final_asset - smart_total_investment) / smart_total_investment * 100
+    smart_total_deposited = smart.get('total_deposited', smart_total_investment)
+    smart_cash_balance = smart.get('cash_balance', 0)
+    smart_total_asset = smart_final_asset + smart_cash_balance
+    smart_total_return = (smart_total_asset - smart_total_deposited) / smart_total_deposited * 100 if smart_total_deposited > 0 else 0
     
     days = (end_date - start_date).days
     years = days / 365.0 if days > 0 else 0
@@ -1045,13 +1049,16 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("固定定投累计投入", f"¥{fixed_total_investment:,.2f}")
+        st.metric("固定定投累计存入", f"¥{fixed_total_deposited:,.2f}")
     with col2:
-        st.metric("智能定投累计投入", f"¥{smart_total_investment:,.2f}")
+        st.metric("智能定投累计存入", f"¥{smart_total_deposited:,.2f}")
     with col3:
-        diff_investment = smart_total_investment - fixed_total_investment
-        st.metric("投入差异", f"¥{diff_investment:,.2f}", 
-                  f"{'多投入' if diff_investment > 0 else '少投入'} {abs(diff_investment/fixed_total_investment*100):.1f}%")
+        if use_cash_flow:
+            st.metric("存入金额一致", "✓", help="启用现金流账户后，两种策略存入金额相同")
+        else:
+            diff_investment = smart_total_investment - fixed_total_investment
+            st.metric("投入差异", f"¥{diff_investment:,.2f}", 
+                      f"{'多投入' if diff_investment > 0 else '少投入'} {abs(diff_investment/fixed_total_investment*100):.1f}%")
     
     col4, col5, col6 = st.columns(3)
     with col4:
@@ -1062,6 +1069,16 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
         diff_asset = smart_final_asset - fixed_final_asset
         st.metric("资产差异", f"¥{diff_asset:,.2f}",
                   f"{'+' if diff_asset > 0 else ''}{diff_asset/fixed_final_asset*100:.2f}%")
+    
+    if use_cash_flow and smart_cash_balance > 0:
+        col_cash1, col_cash2, col_cash3 = st.columns(3)
+        with col_cash1:
+            st.metric("智能定投现金余额", f"¥{smart_cash_balance:,.2f}", help="未投入的现金")
+        with col_cash2:
+            st.metric("智能定投总资产", f"¥{smart_total_asset:,.2f}", help="持仓市值 + 现金余额")
+        with col_cash3:
+            cash_utilization = (smart_total_investment / smart_total_deposited * 100) if smart_total_deposited > 0 else 0
+            st.metric("现金利用率", f"{cash_utilization:.1f}%", help="实际投入/累计存入")
     
     col7, col8, col9 = st.columns(3)
     with col7:
@@ -1116,6 +1133,8 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
     st.subheader("策略参数")
     st.write(f"- 策略类型: {strategy_config.strategy_type}")
     st.write(f"- 基础定投金额: ¥{base_amount:,.2f}")
+    if use_cash_flow:
+        st.write(f"- 现金流账户: 已启用")
     if hasattr(strategy_config, 'ma_period'):
         st.write(f"- 均线周期: {strategy_config.ma_period}天")
     if hasattr(strategy_config, 'trend_period'):
@@ -1143,7 +1162,7 @@ def display_smart_investment_records(results_df):
 
 
 def display_comparison_probability_results(comparison_stats, investment_duration, freq_type, freq_param, 
-                                            base_amount, sampling, strategy_config, realistic_params=None):
+                                            base_amount, sampling, strategy_config, realistic_params=None, use_cash_flow=True):
     from .chart_renderer import create_comparison_probability_chart, create_comparison_timeline_chart
     
     st.header(f"策略对比概率分析结果（定投时长: {investment_duration}年）")
@@ -1201,15 +1220,29 @@ def display_comparison_probability_results(comparison_stats, investment_duration
     st.markdown("---")
     st.subheader("投入金额对比")
     
+    smart_avg_deposited = comparison_stats.get('smart_avg_deposited', comparison_stats['smart_avg_investment'])
+    smart_avg_cash_balance = comparison_stats.get('smart_avg_cash_balance', 0)
+    
     col16, col17, col18 = st.columns(3)
     with col16:
-        st.metric("固定定投平均投入", f"¥{comparison_stats['fixed_avg_investment']:,.0f}")
+        st.metric("固定定投平均存入", f"¥{comparison_stats['fixed_avg_investment']:,.0f}")
     with col17:
-        st.metric("智能定投平均投入", f"¥{comparison_stats['smart_avg_investment']:,.0f}")
+        st.metric("智能定投平均存入", f"¥{smart_avg_deposited:,.0f}")
     with col18:
-        diff = comparison_stats['smart_avg_investment'] - comparison_stats['fixed_avg_investment']
-        pct = diff / comparison_stats['fixed_avg_investment'] * 100 if comparison_stats['fixed_avg_investment'] > 0 else 0
-        st.metric("投入差异", f"¥{diff:,.0f}", f"{pct:+.1f}%")
+        if use_cash_flow:
+            st.metric("存入金额一致", "✓", help="启用现金流账户后，两种策略存入金额相同")
+        else:
+            diff = comparison_stats['smart_avg_investment'] - comparison_stats['fixed_avg_investment']
+            pct = diff / comparison_stats['fixed_avg_investment'] * 100 if comparison_stats['fixed_avg_investment'] > 0 else 0
+            st.metric("投入差异", f"¥{diff:,.0f}", f"{pct:+.1f}%")
+    
+    if use_cash_flow and smart_avg_cash_balance > 0:
+        col_cash1, col_cash2 = st.columns(2)
+        with col_cash1:
+            st.metric("智能定投平均现金余额", f"¥{smart_avg_cash_balance:,.0f}", help="期末未投入的现金")
+        with col_cash2:
+            cash_utilization = ((comparison_stats['smart_avg_investment'] / smart_avg_deposited) * 100) if smart_avg_deposited > 0 else 0
+            st.metric("平均现金利用率", f"{cash_utilization:.1f}%", help="实际投入/累计存入")
     
     st.markdown("---")
     st.subheader("收益分布对比")
@@ -1229,6 +1262,8 @@ def display_comparison_probability_results(comparison_stats, investment_duration
     st.write(f"- 采样方式: {sampling}")
     st.write(f"- 模拟次数: {comparison_stats['total_count']}次")
     st.write(f"- 策略类型: {strategy_config.strategy_type}")
+    if use_cash_flow:
+        st.write(f"- 现金流账户: 已启用")
     
     st.markdown("---")
     with st.expander("查看详细数据"):
@@ -1257,7 +1292,10 @@ def display_comparison_probability_results(comparison_stats, investment_duration
             smart_df = comparison_stats['smart_results_df'].copy()
             smart_df['起始日期'] = smart_df['start_date'].astype(str)
             smart_df['结束日期'] = smart_df['end_date'].astype(str)
-            if realistic_params:
+            if 'total_return_with_cash' in smart_df.columns:
+                smart_df['累计收益率(%)'] = smart_df['total_return_with_cash'].round(2)
+                smart_df['年化收益率(%)'] = smart_df['annualized_with_cash'].round(2)
+            elif realistic_params:
                 smart_df['累计收益率(%)'] = smart_df['real_total_return'].round(2)
                 smart_df['年化收益率(%)'] = smart_df['real_annualized'].round(2)
             else:

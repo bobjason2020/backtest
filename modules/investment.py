@@ -13,7 +13,16 @@ def get_investment_dates(df, start_date, end_date, freq_type, freq_param):
     start_dt = pd.to_datetime(start_date)
     end_dt = pd.to_datetime(end_date)
     
-    if freq_type == "按日":
+    if freq_type == "一次性投入":
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            current_date = current_dt.date()
+            if current_date in trading_dates:
+                investment_dates.append(current_date)
+                break
+            current_dt += timedelta(days=1)
+    
+    elif freq_type == "按日":
         current_dt = start_dt
         while current_dt <= end_dt:
             current_date = current_dt.date()

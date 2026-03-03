@@ -90,7 +90,7 @@ def render_sidebar():
                     st.info(f"随机选择的时间段:\n开始: {start_date}\n结束: {end_date}")
             
             st.subheader("定投频率")
-            freq_type = st.radio("选择频率", ["按日", "按周", "按月"], horizontal=True, index=1)
+            freq_type = st.radio("选择频率", ["按日", "按周", "按月", "一次性投入"], horizontal=True, index=1)
             
             freq_param = None
             if freq_type == "按周":

@@ -139,6 +139,13 @@ def _render_single_backtest_ui(df, date_range):
     elif freq_type == "按月":
         freq_param = st.selectbox("选择定投日", MONTH_OPTIONS, index=0)
     
+    st.subheader("定投策略")
+    strategy_mode = st.radio("选择策略", ["固定定投", "智能定投"], horizontal=True, index=0)
+    
+    strategy_config = None
+    if strategy_mode == "智能定投":
+        strategy_config = _render_strategy_config_ui(date_range)
+    
     st.subheader("定投金额")
     amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP)
     
@@ -155,7 +162,9 @@ def _render_single_backtest_ui(df, date_range):
         'freq_param': freq_param,
         'amount': amount,
         'realistic_params': realistic_params,
-        'run_backtest': run_backtest
+        'run_backtest': run_backtest,
+        'strategy_mode': strategy_mode,
+        'strategy_config': strategy_config
     }
 
 
@@ -192,6 +201,14 @@ def _render_probability_analysis_ui(df, date_range):
     st.subheader("定投金额")
     amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP, key="prob_amount")
     
+    st.subheader("定投策略")
+    strategy_mode = st.radio("选择策略", ["固定定投", "智能定投"], horizontal=True, index=0, key="prob_strategy")
+    
+    strategy_config = None
+    if strategy_mode == "智能定投":
+        strategy_config = _render_strategy_config_ui(date_range)
+        strategy_config.base_amount = amount
+    
     st.subheader("采样设置")
     sampling = st.selectbox("起始日期采样方式", SAMPLING_OPTIONS, index=0, help="每月采样：每月取一个起始日期；每周采样：每周取一个起始日期；每日采样：每个交易日都作为起始日期（计算较慢）")
     
@@ -210,7 +227,9 @@ def _render_probability_analysis_ui(df, date_range):
         'amount': amount,
         'sampling': sampling,
         'realistic_params': realistic_params,
-        'run_backtest': run_backtest
+        'run_backtest': run_backtest,
+        'strategy_mode': strategy_mode,
+        'strategy_config': strategy_config
     }
 
 

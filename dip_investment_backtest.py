@@ -36,12 +36,20 @@ if params['df'] is not None and params['run_backtest']:
                 if len(investment_dates) == 0:
                     st.warning("在选定的时间范围内没有找到有效的定投日期！")
                 else:
-                    results_df, total_shares_ideal, total_investment, total_purchase_fee = run_backtest_calculation(
-                        params['df'], 
-                        investment_dates, 
-                        params['amount'], 
-                        params['realistic_params']
-                    )
+                    if params.get('strategy_mode', 'fixed') == 'smart':
+                        results_df, total_shares_ideal, total_investment, total_purchase_fee = run_backtest_calculation(
+                            params['df'], 
+                            investment_dates, 
+                            params['amount'], 
+                            params['realistic_params']
+                        )
+                    else:
+                        results_df, total_shares_ideal, total_investment, total_purchase_fee = run_backtest_calculation(
+                            params['df'], 
+                            investment_dates, 
+                            params['amount'], 
+                            params['realistic_params']
+                        )
                     
                     daily_assets_df = calculate_daily_assets(
                         params['df'], 

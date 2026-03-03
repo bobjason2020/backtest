@@ -156,6 +156,23 @@ def run_single_backtest(df, start_date, investment_duration_years, freq_type, fr
     }
 
 
+def _run_single_backtest_wrapper(args):
+    df, start_date, investment_duration_years, freq_type, freq_param, amount, realistic_params = args
+    return run_single_backtest(df, start_date, investment_duration_years, freq_type, freq_param, amount, realistic_params)
+
+
+def _run_single_smart_backtest_wrapper(args):
+    df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params = args
+    return run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params)
+
+
+def _run_comparison_backtest_wrapper(args):
+    df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params = args
+    fixed = run_single_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params)
+    smart = run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params)
+    return fixed, smart
+
+
 def run_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
                              freq_type, freq_param, amount, realistic_params=None, 
                              sampling='monthly', progress_callback=None):
@@ -185,15 +202,16 @@ def run_probability_analysis(df, analysis_start_date, analysis_end_date, investm
     results = []
     total = len(start_dates)
     
-    num_workers = min(multiprocessing.cpu_count() * 2, 16)
+    num_workers = min(multiprocessing.cpu_count(), 8)
     
     if num_workers > 1 and total > 4:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ProcessPoolExecutor, as_completed
         
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
             future_to_date = {
-                executor.submit(run_single_backtest, df, start_date, investment_duration_years, 
-                               freq_type, freq_param, amount, realistic_params): start_date
+                executor.submit(_run_single_backtest_wrapper, 
+                               (df, start_date, investment_duration_years, 
+                                freq_type, freq_param, amount, realistic_params)): start_date
                 for start_date in start_dates
             }
             
@@ -445,15 +463,16 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
     results = []
     total = len(start_dates)
     
-    num_workers = min(multiprocessing.cpu_count() * 2, 16)
+    num_workers = min(multiprocessing.cpu_count(), 8)
     
     if num_workers > 1 and total > 4:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ProcessPoolExecutor, as_completed
         
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
             future_to_date = {
-                executor.submit(run_single_smart_backtest, df, start_date, investment_duration_years,
-                               freq_type, freq_param, base_amount, strategy_config, realistic_params): start_date
+                executor.submit(_run_single_smart_backtest_wrapper, 
+                               (df, start_date, investment_duration_years,
+                                freq_type, freq_param, base_amount, strategy_config, realistic_params)): start_date
                 for start_date in start_dates
             }
             
@@ -511,19 +530,16 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
     smart_results = []
     total = len(start_dates)
     
-    num_workers = min(multiprocessing.cpu_count() * 2, 16)
+    num_workers = min(multiprocessing.cpu_count(), 8)
     
     if num_workers > 1 and total > 4:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ProcessPoolExecutor, as_completed
         
-        def run_comparison_single(start_date):
-            fixed = run_single_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params)
-            smart = run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params)
-            return fixed, smart
-        
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
             future_to_date = {
-                executor.submit(run_comparison_single, start_date): start_date
+                executor.submit(_run_comparison_backtest_wrapper, 
+                               (df, start_date, investment_duration_years, freq_type, freq_param, 
+                                base_amount, strategy_config, realistic_params)): start_date
                 for start_date in start_dates
             }
             

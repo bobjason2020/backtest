@@ -156,9 +156,15 @@ def run_single_backtest(df, start_date, investment_duration_years, freq_type, fr
     }
 
 
-def run_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
-                             freq_type, freq_param, amount, realistic_params=None, 
-                             sampling='monthly', progress_callback=None):
+def _hash_df_for_cache(df):
+    if df is None:
+        return "None"
+    return str(pd.util.hash_pandas_object(df).sum())
+
+
+@st.cache_data(ttl=3600, show_spinner=False, hash_funcs={pd.DataFrame: _hash_df_for_cache})
+def _run_probability_analysis_cached(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                      freq_type, freq_param, amount, realistic_params, sampling):
     start_time = time.time()
     
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
@@ -197,26 +203,34 @@ def run_probability_analysis(df, analysis_start_date, analysis_end_date, investm
                 for start_date in start_dates
             }
             
-            completed = 0
             for future in as_completed(future_to_date):
                 result = future.result()
                 if result is not None:
                     results.append(result)
-                completed += 1
-                if progress_callback and completed % max(1, total // 100) == 0:
-                    progress_callback(completed, total)
     else:
-        for i, start_date in enumerate(start_dates):
+        for start_date in start_dates:
             result = run_single_backtest(
                 df, start_date, investment_duration_years, freq_type, freq_param, amount, realistic_params
             )
             if result is not None:
                 results.append(result)
-            
-            if progress_callback and (i + 1) % max(1, total // 100) == 0:
-                progress_callback(i + 1, total)
     
     elapsed_time = time.time() - start_time
+    return results, elapsed_time
+
+
+def run_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                             freq_type, freq_param, amount, realistic_params=None, 
+                             sampling='monthly', progress_callback=None):
+    results, elapsed_time = _run_probability_analysis_cached(
+        df, analysis_start_date, analysis_end_date, investment_duration_years,
+        freq_type, freq_param, amount, realistic_params, sampling
+    )
+    
+    if progress_callback:
+        total = len(results)
+        progress_callback(total, total)
+    
     return results, elapsed_time
 
 
@@ -416,9 +430,9 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
     }
 
 
-def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
-                                    freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
-                                    sampling='monthly', progress_callback=None):
+@st.cache_data(ttl=3600, show_spinner=False, hash_funcs={pd.DataFrame: _hash_df_for_cache})
+def _run_smart_probability_analysis_cached(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                            freq_type, freq_param, base_amount, strategy_config, realistic_params, sampling):
     start_time = time.time()
     
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
@@ -457,33 +471,41 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
                 for start_date in start_dates
             }
             
-            completed = 0
             for future in as_completed(future_to_date):
                 result = future.result()
                 if result is not None:
                     results.append(result)
-                completed += 1
-                if progress_callback and completed % max(1, total // 100) == 0:
-                    progress_callback(completed, total)
     else:
-        for i, start_date in enumerate(start_dates):
+        for start_date in start_dates:
             result = run_single_smart_backtest(
                 df, start_date, investment_duration_years, freq_type, freq_param, 
                 base_amount, strategy_config, realistic_params
             )
             if result is not None:
                 results.append(result)
-            
-            if progress_callback and (i + 1) % max(1, total // 100) == 0:
-                progress_callback(i + 1, total)
     
     elapsed_time = time.time() - start_time
     return results, elapsed_time
 
 
-def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
-                                         freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
-                                         sampling='monthly', progress_callback=None):
+def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                    freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
+                                    sampling='monthly', progress_callback=None):
+    results, elapsed_time = _run_smart_probability_analysis_cached(
+        df, analysis_start_date, analysis_end_date, investment_duration_years,
+        freq_type, freq_param, base_amount, strategy_config, realistic_params, sampling
+    )
+    
+    if progress_callback:
+        total = len(results)
+        progress_callback(total, total)
+    
+    return results, elapsed_time
+
+
+@st.cache_data(ttl=3600, show_spinner=False, hash_funcs={pd.DataFrame: _hash_df_for_cache})
+def _run_comparison_probability_analysis_cached(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                                 freq_type, freq_param, base_amount, strategy_config, realistic_params, sampling):
     start_time = time.time()
     
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
@@ -527,17 +549,13 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
                 for start_date in start_dates
             }
             
-            completed = 0
             for future in as_completed(future_to_date):
                 fixed_result, smart_result = future.result()
                 if fixed_result is not None and smart_result is not None:
                     fixed_results.append(fixed_result)
                     smart_results.append(smart_result)
-                completed += 1
-                if progress_callback and completed % max(1, total // 100) == 0:
-                    progress_callback(completed, total)
     else:
-        for i, start_date in enumerate(start_dates):
+        for start_date in start_dates:
             fixed_result = run_single_backtest(
                 df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params
             )
@@ -549,11 +567,23 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
             if fixed_result is not None and smart_result is not None:
                 fixed_results.append(fixed_result)
                 smart_results.append(smart_result)
-            
-            if progress_callback and (i + 1) % max(1, total // 100) == 0:
-                progress_callback(i + 1, total)
     
     elapsed_time = time.time() - start_time
+    return fixed_results, smart_results, elapsed_time
+
+
+def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
+                                         freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
+                                         sampling='monthly', progress_callback=None):
+    fixed_results, smart_results, elapsed_time = _run_comparison_probability_analysis_cached(
+        df, analysis_start_date, analysis_end_date, investment_duration_years,
+        freq_type, freq_param, base_amount, strategy_config, realistic_params, sampling
+    )
+    
+    if progress_callback:
+        total = len(fixed_results)
+        progress_callback(total, total)
+    
     return fixed_results, smart_results, elapsed_time
 
 

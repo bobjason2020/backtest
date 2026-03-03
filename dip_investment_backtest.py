@@ -161,7 +161,7 @@ if params['df'] is not None and params['run_backtest']:
             
             if strategy_mode == '固定定投':
                 with st.spinner("正在进行概率分析..."):
-                    results = run_probability_analysis(
+                    results, elapsed_time = run_probability_analysis(
                         params['df'],
                         params['analysis_start_date'],
                         params['analysis_end_date'],
@@ -180,7 +180,7 @@ if params['df'] is not None and params['run_backtest']:
                         stats = calculate_probability_statistics(results, params['realistic_params'])
                         
                         progress_bar.progress(100)
-                        status_text.text(f"分析完成！共 {len(results)} 次模拟")
+                        status_text.text(f"分析完成！共 {len(results)} 次模拟，耗时 {elapsed_time:.1f} 秒")
                         
                         display_probability_analysis_results(
                             stats,
@@ -195,7 +195,7 @@ if params['df'] is not None and params['run_backtest']:
             
             elif strategy_mode == '智能定投':
                 with st.spinner("正在进行智能定投概率分析..."):
-                    results = run_smart_probability_analysis(
+                    results, elapsed_time = run_smart_probability_analysis(
                         params['df'],
                         params['analysis_start_date'],
                         params['analysis_end_date'],
@@ -215,7 +215,7 @@ if params['df'] is not None and params['run_backtest']:
                         stats = calculate_probability_statistics(results, params['realistic_params'])
                         
                         progress_bar.progress(100)
-                        status_text.text(f"分析完成！共 {len(results)} 次模拟")
+                        status_text.text(f"分析完成！共 {len(results)} 次模拟，耗时 {elapsed_time:.1f} 秒")
                         
                         display_probability_analysis_results(
                             stats,
@@ -230,7 +230,7 @@ if params['df'] is not None and params['run_backtest']:
             
             elif strategy_mode == '策略对比':
                 with st.spinner("正在进行策略对比概率分析..."):
-                    fixed_results, smart_results = run_comparison_probability_analysis(
+                    fixed_results, smart_results, elapsed_time = run_comparison_probability_analysis(
                         params['df'],
                         params['analysis_start_date'],
                         params['analysis_end_date'],

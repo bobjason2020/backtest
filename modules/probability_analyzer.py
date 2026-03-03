@@ -4,6 +4,9 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import json
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 from .investment import get_investment_dates, run_backtest_calculation, run_smart_backtest_calculation
 from .smart_strategy import SmartStrategyConfig, create_strategy
@@ -156,6 +159,8 @@ def run_single_backtest(df, start_date, investment_duration_years, freq_type, fr
 def run_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
                              freq_type, freq_param, amount, realistic_params=None, 
                              sampling='monthly', progress_callback=None):
+    start_time = time.time()
+    
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
     
     if sampling == 'monthly':
@@ -180,17 +185,39 @@ def run_probability_analysis(df, analysis_start_date, analysis_end_date, investm
     results = []
     total = len(start_dates)
     
-    for i, start_date in enumerate(start_dates):
-        result = run_single_backtest(
-            df, start_date, investment_duration_years, freq_type, freq_param, amount, realistic_params
-        )
-        if result is not None:
-            results.append(result)
-        
-        if progress_callback and (i + 1) % max(1, total // 100) == 0:
-            progress_callback(i + 1, total)
+    num_workers = min(multiprocessing.cpu_count(), 8)
     
-    return results
+    if num_workers > 1 and total > 10:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_date = {
+                executor.submit(run_single_backtest, df, start_date, investment_duration_years, 
+                               freq_type, freq_param, amount, realistic_params): start_date
+                for start_date in start_dates
+            }
+            
+            completed = 0
+            for future in as_completed(future_to_date):
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+                completed += 1
+                if progress_callback and completed % max(1, total // 100) == 0:
+                    progress_callback(completed, total)
+    else:
+        for i, start_date in enumerate(start_dates):
+            result = run_single_backtest(
+                df, start_date, investment_duration_years, freq_type, freq_param, amount, realistic_params
+            )
+            if result is not None:
+                results.append(result)
+            
+            if progress_callback and (i + 1) % max(1, total // 100) == 0:
+                progress_callback(i + 1, total)
+    
+    elapsed_time = time.time() - start_time
+    return results, elapsed_time
 
 
 def calculate_probability_statistics(results, realistic_params=None):
@@ -392,6 +419,8 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
 def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
                                     freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
                                     sampling='monthly', progress_callback=None):
+    start_time = time.time()
+    
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
     
     if sampling == 'monthly':
@@ -416,23 +445,47 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
     results = []
     total = len(start_dates)
     
-    for i, start_date in enumerate(start_dates):
-        result = run_single_smart_backtest(
-            df, start_date, investment_duration_years, freq_type, freq_param, 
-            base_amount, strategy_config, realistic_params
-        )
-        if result is not None:
-            results.append(result)
-        
-        if progress_callback and (i + 1) % max(1, total // 100) == 0:
-            progress_callback(i + 1, total)
+    num_workers = min(multiprocessing.cpu_count(), 8)
     
-    return results
+    if num_workers > 1 and total > 10:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_date = {
+                executor.submit(run_single_smart_backtest, df, start_date, investment_duration_years,
+                               freq_type, freq_param, base_amount, strategy_config, realistic_params): start_date
+                for start_date in start_dates
+            }
+            
+            completed = 0
+            for future in as_completed(future_to_date):
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+                completed += 1
+                if progress_callback and completed % max(1, total // 100) == 0:
+                    progress_callback(completed, total)
+    else:
+        for i, start_date in enumerate(start_dates):
+            result = run_single_smart_backtest(
+                df, start_date, investment_duration_years, freq_type, freq_param, 
+                base_amount, strategy_config, realistic_params
+            )
+            if result is not None:
+                results.append(result)
+            
+            if progress_callback and (i + 1) % max(1, total // 100) == 0:
+                progress_callback(i + 1, total)
+    
+    elapsed_time = time.time() - start_time
+    return results, elapsed_time
 
 
 def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_date, investment_duration_years,
                                          freq_type, freq_param, base_amount, strategy_config, realistic_params=None, 
                                          sampling='monthly', progress_callback=None):
+    start_time = time.time()
+    
     start_dates = get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years)
     
     if sampling == 'monthly':
@@ -458,23 +511,50 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
     smart_results = []
     total = len(start_dates)
     
-    for i, start_date in enumerate(start_dates):
-        fixed_result = run_single_backtest(
-            df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params
-        )
-        smart_result = run_single_smart_backtest(
-            df, start_date, investment_duration_years, freq_type, freq_param, 
-            base_amount, strategy_config, realistic_params
-        )
-        
-        if fixed_result is not None and smart_result is not None:
-            fixed_results.append(fixed_result)
-            smart_results.append(smart_result)
-        
-        if progress_callback and (i + 1) % max(1, total // 100) == 0:
-            progress_callback(i + 1, total)
+    num_workers = min(multiprocessing.cpu_count(), 8)
     
-    return fixed_results, smart_results
+    if num_workers > 1 and total > 10:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        def run_comparison_single(start_date):
+            fixed = run_single_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params)
+            smart = run_single_smart_backtest(df, start_date, investment_duration_years, freq_type, freq_param, base_amount, strategy_config, realistic_params)
+            return fixed, smart
+        
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_date = {
+                executor.submit(run_comparison_single, start_date): start_date
+                for start_date in start_dates
+            }
+            
+            completed = 0
+            for future in as_completed(future_to_date):
+                fixed_result, smart_result = future.result()
+                if fixed_result is not None and smart_result is not None:
+                    fixed_results.append(fixed_result)
+                    smart_results.append(smart_result)
+                completed += 1
+                if progress_callback and completed % max(1, total // 100) == 0:
+                    progress_callback(completed, total)
+    else:
+        for i, start_date in enumerate(start_dates):
+            fixed_result = run_single_backtest(
+                df, start_date, investment_duration_years, freq_type, freq_param, base_amount, realistic_params
+            )
+            smart_result = run_single_smart_backtest(
+                df, start_date, investment_duration_years, freq_type, freq_param, 
+                base_amount, strategy_config, realistic_params
+            )
+            
+            if fixed_result is not None and smart_result is not None:
+                fixed_results.append(fixed_result)
+                smart_results.append(smart_result)
+            
+            if progress_callback and (i + 1) % max(1, total // 100) == 0:
+                progress_callback(i + 1, total)
+    
+    elapsed_time = time.time() - start_time
+    return fixed_results, smart_results, elapsed_time
 
 
 def calculate_comparison_statistics(fixed_results, smart_results, realistic_params=None):

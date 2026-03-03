@@ -68,3 +68,81 @@ DEFAULT_LOW_MULTIPLIER = 1.5
 DEFAULT_NORMAL_MULTIPLIER = 1.0
 DEFAULT_HIGH_MULTIPLIER = 0.5
 DEFAULT_EXTREME_HIGH_MULTIPLIER = 0.0
+
+MA_STRATEGY_PRESETS = {
+    "保守型": {
+        "ma_period": 20,
+        "extreme_high_threshold": 15.0,
+        "extreme_high_multiplier": 0.5,
+        "high_threshold": 10.0,
+        "high_multiplier": 0.8,
+        "normal_multiplier": 1.0,
+        "low_threshold": -10.0,
+        "low_multiplier": 1.2,
+        "extreme_low_threshold": -15.0,
+        "extreme_low_multiplier": 1.5
+    },
+    "均衡型（默认）": {
+        "ma_period": 20,
+        "extreme_high_threshold": 10.0,
+        "extreme_high_multiplier": 0.0,
+        "high_threshold": 5.0,
+        "high_multiplier": 0.5,
+        "normal_multiplier": 1.0,
+        "low_threshold": -5.0,
+        "low_multiplier": 1.5,
+        "extreme_low_threshold": -10.0,
+        "extreme_low_multiplier": 2.0
+    },
+    "激进型": {
+        "ma_period": 20,
+        "extreme_high_threshold": 8.0,
+        "extreme_high_multiplier": 0.0,
+        "high_threshold": 4.0,
+        "high_multiplier": 0.3,
+        "normal_multiplier": 1.0,
+        "low_threshold": -4.0,
+        "low_multiplier": 2.0,
+        "extreme_low_threshold": -8.0,
+        "extreme_low_multiplier": 3.0
+    },
+    "长线均线": {
+        "ma_period": 60,
+        "extreme_high_threshold": 15.0,
+        "extreme_high_multiplier": 0.0,
+        "high_threshold": 10.0,
+        "high_multiplier": 0.5,
+        "normal_multiplier": 1.0,
+        "low_threshold": -10.0,
+        "low_multiplier": 1.5,
+        "extreme_low_threshold": -20.0,
+        "extreme_low_multiplier": 2.5
+    }
+}
+
+MA_PRESETS_FILE = "data/ma_strategy_presets.json"
+
+import json
+import os
+
+def load_custom_presets():
+    if os.path.exists(MA_PRESETS_FILE):
+        try:
+            with open(MA_PRESETS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_custom_preset(name, params):
+    presets = load_custom_presets()
+    presets[name] = params
+    os.makedirs(os.path.dirname(MA_PRESETS_FILE), exist_ok=True)
+    with open(MA_PRESETS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(presets, f, ensure_ascii=False, indent=2)
+
+def get_all_presets():
+    all_presets = MA_STRATEGY_PRESETS.copy()
+    custom = load_custom_presets()
+    all_presets.update(custom)
+    return all_presets

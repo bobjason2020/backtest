@@ -59,9 +59,40 @@ class BaseStrategy(ABC):
         return multiplier_map.get(signal, 1.0)
 
 
-class MovingAverageStrategy(BaseStrategy):
+class PrecomputedStrategy(BaseStrategy):
+    def __init__(self, config: SmartStrategyConfig):
+        super().__init__(config)
+        self._precomputed_df = None
+        self._precomputed_hash = None
+    
+    def precompute(self, df: pd.DataFrame):
+        df_hash = str(pd.util.hash_pandas_object(df).sum())
+        if self._precomputed_hash != df_hash:
+            self._precomputed_df = self._do_precompute(df.copy())
+            self._precomputed_hash = df_hash
+        return self._precomputed_df
+    
+    def _do_precompute(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df
+    
     def calculate_signal(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
-        df_filtered = df.loc[df['日期'].dt.date <= current_date]
+        precomputed_df = self.precompute(df)
+        return self._calculate_from_precomputed(precomputed_df, current_date)
+    
+    @abstractmethod
+    def _calculate_from_precomputed(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
+        pass
+
+
+class MovingAverageStrategy(PrecomputedStrategy):
+    def _do_precompute(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['_date_only'] = df['日期'].dt.date
+        df['_MA'] = df['收盘价'].rolling(window=self.config.ma_period).mean()
+        df['_MA_deviation'] = (df['收盘价'] - df['_MA']) / df['_MA']
+        return df
+    
+    def _calculate_from_precomputed(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
+        df_filtered = df[df['_date_only'] <= current_date]
         
         if len(df_filtered) < self.config.ma_period:
             last_row = df_filtered.iloc[-1]
@@ -75,10 +106,16 @@ class MovingAverageStrategy(BaseStrategy):
         
         last_row = df_filtered.iloc[-1]
         current_price = last_row['收盘价']
+        deviation = last_row['_MA_deviation']
         
-        ma_value = df_filtered.tail(self.config.ma_period)['收盘价'].mean()
-        
-        deviation = (current_price - ma_value) / ma_value
+        if pd.isna(deviation):
+            return StrategySignal(
+                date=current_date,
+                price=current_price,
+                signal="normal",
+                multiplier=1.0,
+                reason=f"均线计算中，使用正常定投"
+            )
         
         if deviation <= self.config.extreme_low_threshold:
             signal = "extreme_low"
@@ -105,9 +142,14 @@ class MovingAverageStrategy(BaseStrategy):
         )
 
 
-class TrendMomentumStrategy(BaseStrategy):
-    def calculate_signal(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
-        df_filtered = df.loc[df['日期'].dt.date <= current_date]
+class TrendMomentumStrategy(PrecomputedStrategy):
+    def _do_precompute(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['_date_only'] = df['日期'].dt.date
+        df['_trend_return'] = df['收盘价'].pct_change(periods=self.config.trend_period)
+        return df
+    
+    def _calculate_from_precomputed(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
+        df_filtered = df[df['_date_only'] <= current_date]
         
         if len(df_filtered) < self.config.trend_period + 1:
             last_row = df_filtered.iloc[-1]
@@ -121,10 +163,16 @@ class TrendMomentumStrategy(BaseStrategy):
         
         last_row = df_filtered.iloc[-1]
         current_price = last_row['收盘价']
+        trend_return = last_row['_trend_return']
         
-        price_n_days_ago = df_filtered.iloc[-(self.config.trend_period + 1)]['收盘价']
-        
-        trend_return = (current_price - price_n_days_ago) / price_n_days_ago
+        if pd.isna(trend_return):
+            return StrategySignal(
+                date=current_date,
+                price=current_price,
+                signal="normal",
+                multiplier=1.0,
+                reason=f"趋势计算中，使用正常定投"
+            )
         
         if trend_return <= self.config.trend_extreme_low_threshold:
             signal = "extreme_low"
@@ -151,11 +199,27 @@ class TrendMomentumStrategy(BaseStrategy):
         )
 
 
-class ValuationStrategy(BaseStrategy):
-    def calculate_signal(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
-        df_filtered = df.loc[df['日期'].dt.date <= current_date]
-        
+class ValuationStrategy(PrecomputedStrategy):
+    def _do_precompute(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['_date_only'] = df['日期'].dt.date
         valuation_col = self.config.valuation_column
+        
+        if valuation_col in df.columns:
+            def calc_percentile(x):
+                if len(x) <= 1:
+                    return 50.0
+                current = x.iloc[-1]
+                historical = x.iloc[:-1]
+                return (historical < current).sum() / len(historical) * 100
+            
+            df['_valuation_percentile'] = df[valuation_col].expanding().apply(calc_percentile)
+        
+        return df
+    
+    def _calculate_from_precomputed(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
+        df_filtered = df[df['_date_only'] <= current_date]
+        valuation_col = self.config.valuation_column
+        
         if valuation_col not in df_filtered.columns:
             last_row = df_filtered.iloc[-1]
             return StrategySignal(
@@ -179,9 +243,9 @@ class ValuationStrategy(BaseStrategy):
                 reason=f"{valuation_col}数据缺失，使用正常定投"
             )
         
-        historical_valuations = df_filtered[valuation_col].dropna()
+        percentile = last_row['_valuation_percentile']
         
-        if len(historical_valuations) < 30:
+        if pd.isna(percentile):
             return StrategySignal(
                 date=current_date,
                 price=current_price,
@@ -189,8 +253,6 @@ class ValuationStrategy(BaseStrategy):
                 multiplier=1.0,
                 reason=f"历史{valuation_col}数据不足，使用正常定投"
             )
-        
-        percentile = (historical_valuations < current_valuation).sum() / len(historical_valuations) * 100
         
         if percentile <= self.config.extreme_low_percentile:
             signal = "extreme_low"

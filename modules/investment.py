@@ -94,8 +94,7 @@ def find_next_trading_day(target_date, trading_dates, end_date):
 
 
 def run_backtest_calculation(df, investment_dates, amount, realistic_params=None):
-    df_calc = df.copy()
-    df_calc['日期_date'] = df_calc['日期'].dt.date
+    dates = df['日期'].dt.date
     
     results = []
     total_shares = 0
@@ -107,7 +106,7 @@ def run_backtest_calculation(df, investment_dates, amount, realistic_params=None
         purchase_fee_rate = realistic_params.get('purchase_fee', 0)
     
     for inv_date in investment_dates:
-        row = df_calc[df_calc['日期_date'] == inv_date]
+        row = df[dates == inv_date]
         if len(row) > 0:
             close_price = row['收盘价'].values[0]
             
@@ -135,8 +134,7 @@ def run_backtest_calculation(df, investment_dates, amount, realistic_params=None
 
 
 def calculate_daily_assets(df, investment_dates, amount, realistic_params=None):
-    df_daily = df.copy()
-    df_daily['日期_date'] = df_daily['日期'].dt.date
+    dates = df['日期'].dt.date
     
     purchase_fee_rate = 0
     management_fee_rate = 0
@@ -156,7 +154,7 @@ def calculate_daily_assets(df, investment_dates, amount, realistic_params=None):
     investment_by_date = {}
     
     for inv_date in investment_dates:
-        row = df_daily[df_daily['日期_date'] == inv_date]
+        row = df[dates == inv_date]
         if len(row) > 0:
             close_price = row['收盘价'].values[0]
             actual_amount = amount * (1 - purchase_fee_rate)
@@ -176,8 +174,8 @@ def calculate_daily_assets(df, investment_dates, amount, realistic_params=None):
     
     np.random.seed(42)
     
-    for idx, row in df_daily.iterrows():
-        current_date = row['日期_date']
+    for idx, row in df.iterrows():
+        current_date = dates.iloc[idx]
         close_price = row['收盘价']
         
         if current_date in investment_by_date:
@@ -244,8 +242,7 @@ def calculate_lump_sum_return(df, start_date, end_date):
 
 
 def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_config, realistic_params=None):
-    df_calc = df.copy()
-    df_calc['日期_date'] = df_calc['日期'].dt.date
+    dates = df['日期'].dt.date
     
     strategy = create_strategy(strategy_config)
     
@@ -259,11 +256,11 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
         purchase_fee_rate = realistic_params.get('purchase_fee', 0)
     
     for inv_date in investment_dates:
-        row = df_calc[df_calc['日期_date'] == inv_date]
+        row = df[dates == inv_date]
         if len(row) > 0:
             close_price = row['收盘价'].values[0]
             
-            signal = strategy.calculate_signal(df_calc, inv_date)
+            signal = strategy.calculate_signal(df, inv_date)
             actual_amount_raw = base_amount * signal.multiplier
             
             actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
@@ -293,8 +290,7 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
 
 
 def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_config, realistic_params=None):
-    df_daily = df.copy()
-    df_daily['日期_date'] = df_daily['日期'].dt.date
+    dates = df['日期'].dt.date
     
     strategy = create_strategy(strategy_config)
     
@@ -316,10 +312,10 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
     investment_by_date = {}
     
     for inv_date in investment_dates:
-        row = df_daily[df_daily['日期_date'] == inv_date]
+        row = df[dates == inv_date]
         if len(row) > 0:
             close_price = row['收盘价'].values[0]
-            signal = strategy.calculate_signal(df_daily, inv_date)
+            signal = strategy.calculate_signal(df, inv_date)
             actual_amount_raw = base_amount * signal.multiplier
             actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
             shares = actual_amount / close_price if close_price > 0 else 0
@@ -340,9 +336,9 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
     
     np.random.seed(42)
     
-    for idx, row in df_daily.iterrows():
-        current_date = row['日期_date']
-        close_price = row['收盘价']
+    for idx in range(len(df)):
+        current_date = dates.iloc[idx]
+        close_price = df['收盘价'].iloc[idx]
         
         if current_date in investment_by_date:
             running_investment += investment_by_date[current_date]['amount']

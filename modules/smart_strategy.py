@@ -61,7 +61,7 @@ class BaseStrategy(ABC):
 
 class MovingAverageStrategy(BaseStrategy):
     def calculate_signal(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
-        df_filtered = df[df['日期'].dt.date <= current_date].copy()
+        df_filtered = df.loc[df['日期'].dt.date <= current_date]
         
         if len(df_filtered) < self.config.ma_period:
             last_row = df_filtered.iloc[-1]
@@ -107,7 +107,7 @@ class MovingAverageStrategy(BaseStrategy):
 
 class TrendMomentumStrategy(BaseStrategy):
     def calculate_signal(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
-        df_filtered = df[df['日期'].dt.date <= current_date].copy()
+        df_filtered = df.loc[df['日期'].dt.date <= current_date]
         
         if len(df_filtered) < self.config.trend_period + 1:
             last_row = df_filtered.iloc[-1]
@@ -153,7 +153,7 @@ class TrendMomentumStrategy(BaseStrategy):
 
 class ValuationStrategy(BaseStrategy):
     def calculate_signal(self, df: pd.DataFrame, current_date: object) -> StrategySignal:
-        df_filtered = df[df['日期'].dt.date <= current_date].copy()
+        df_filtered = df.loc[df['日期'].dt.date <= current_date]
         
         valuation_col = self.config.valuation_column
         if valuation_col not in df_filtered.columns:

@@ -20,7 +20,8 @@ from .config import (
     DEFAULT_TREND_PERIOD, DEFAULT_TREND_EXTREME_LOW_THRESHOLD, DEFAULT_TREND_LOW_THRESHOLD, 
     DEFAULT_TREND_HIGH_THRESHOLD, DEFAULT_TREND_EXTREME_HIGH_THRESHOLD,
     DEFAULT_EXTREME_LOW_MULTIPLIER, DEFAULT_LOW_MULTIPLIER, DEFAULT_NORMAL_MULTIPLIER,
-    DEFAULT_HIGH_MULTIPLIER, DEFAULT_EXTREME_HIGH_MULTIPLIER
+    DEFAULT_HIGH_MULTIPLIER, DEFAULT_EXTREME_HIGH_MULTIPLIER,
+    MA_STRATEGY_PRESETS, MA_PRESETS_FILE, load_custom_presets, save_custom_preset, get_all_presets
 )
 from .data_loader import load_excel_file, get_date_range
 from .chart_renderer import create_asset_chart, create_price_chart, create_return_chart
@@ -647,9 +648,57 @@ def _render_strategy_config_ui(date_range):
     with st.popover("⚙️ 智能策略参数设置", use_container_width=True):
         if strategy_type == "均线偏离":
             st.markdown("**均线偏离策略参数**")
+            
+            all_presets = get_all_presets()
+            preset_options = list(all_presets.keys()) + ["自定义", "保存当前参数..."]
+            selected_preset = st.selectbox("预设参数", preset_options, key="ma_preset_select", help="选择预设参数或自定义")
+            
+            if selected_preset == "保存当前参数...":
+                preset_name = st.text_input("参数名称", key="preset_name_input", placeholder="输入参数名称")
+                if st.button("保存参数", key="save_preset_btn") and preset_name:
+                    current_params = {
+                        "ma_period": st.session_state.get("ma_period_val", DEFAULT_MA_PERIOD),
+                        "extreme_high_threshold": st.session_state.get("extreme_high_val", DEFAULT_EXTREME_HIGH_THRESHOLD),
+                        "extreme_high_multiplier": st.session_state.get("extreme_high_m_val", DEFAULT_EXTREME_HIGH_MULTIPLIER),
+                        "high_threshold": st.session_state.get("high_val", DEFAULT_HIGH_THRESHOLD),
+                        "high_multiplier": st.session_state.get("high_m_val", DEFAULT_HIGH_MULTIPLIER),
+                        "normal_multiplier": st.session_state.get("normal_m_val", DEFAULT_NORMAL_MULTIPLIER),
+                        "low_threshold": st.session_state.get("low_val", DEFAULT_LOW_THRESHOLD),
+                        "low_multiplier": st.session_state.get("low_m_val", DEFAULT_LOW_MULTIPLIER),
+                        "extreme_low_threshold": st.session_state.get("extreme_low_val", DEFAULT_EXTREME_LOW_THRESHOLD),
+                        "extreme_low_multiplier": st.session_state.get("extreme_low_m_val", DEFAULT_EXTREME_LOW_MULTIPLIER)
+                    }
+                    save_custom_preset(preset_name, current_params)
+                    st.success(f"已保存参数: {preset_name}")
+                    st.rerun()
+            
+            if selected_preset in all_presets:
+                preset = all_presets[selected_preset]
+                default_ma = preset.get("ma_period", DEFAULT_MA_PERIOD)
+                default_extreme_high = preset.get("extreme_high_threshold", DEFAULT_EXTREME_HIGH_THRESHOLD)
+                default_extreme_high_m = preset.get("extreme_high_multiplier", DEFAULT_EXTREME_HIGH_MULTIPLIER)
+                default_high = preset.get("high_threshold", DEFAULT_HIGH_THRESHOLD)
+                default_high_m = preset.get("high_multiplier", DEFAULT_HIGH_MULTIPLIER)
+                default_normal_m = preset.get("normal_multiplier", DEFAULT_NORMAL_MULTIPLIER)
+                default_low = preset.get("low_threshold", DEFAULT_LOW_THRESHOLD)
+                default_low_m = preset.get("low_multiplier", DEFAULT_LOW_MULTIPLIER)
+                default_extreme_low = preset.get("extreme_low_threshold", DEFAULT_EXTREME_LOW_THRESHOLD)
+                default_extreme_low_m = preset.get("extreme_low_multiplier", DEFAULT_EXTREME_LOW_MULTIPLIER)
+            else:
+                default_ma = DEFAULT_MA_PERIOD
+                default_extreme_high = DEFAULT_EXTREME_HIGH_THRESHOLD
+                default_extreme_high_m = DEFAULT_EXTREME_HIGH_MULTIPLIER
+                default_high = DEFAULT_HIGH_THRESHOLD
+                default_high_m = DEFAULT_HIGH_MULTIPLIER
+                default_normal_m = DEFAULT_NORMAL_MULTIPLIER
+                default_low = DEFAULT_LOW_THRESHOLD
+                default_low_m = DEFAULT_LOW_MULTIPLIER
+                default_extreme_low = DEFAULT_EXTREME_LOW_THRESHOLD
+                default_extreme_low_m = DEFAULT_EXTREME_LOW_MULTIPLIER
+            
             col1, col2 = st.columns(2)
             with col1:
-                ma_period = st.selectbox("均线周期", MA_PERIODS, index=MA_PERIODS.index(DEFAULT_MA_PERIOD), help="选择移动平均线周期")
+                ma_period = st.selectbox("均线周期", MA_PERIODS, index=MA_PERIODS.index(default_ma) if default_ma in MA_PERIODS else 0, help="选择移动平均线周期", key="ma_period_val")
             with col2:
                 st.info("当价格低于均线时增加定投，高于均线时减少定投")
             
@@ -663,18 +712,18 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_HIGH_THRESHOLD, step=1.0, key="ma_extreme_high", help="价格高于均线该比例时暂停定投")
+                extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_extreme_high, step=1.0, key="extreme_high_val", help="价格高于均线该比例时暂停定投")
             with col3:
-                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="ma_extreme_high_m", help="0表示暂停定投")
+                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=default_extreme_high_m, step=0.1, key="extreme_high_m_val", help="0表示暂停定投")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
             with col1:
                 st.markdown("**高估**")
             with col2:
-                high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=DEFAULT_HIGH_THRESHOLD, step=1.0, key="ma_high", help="价格高于均线该比例时减少定投")
+                high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_high, step=1.0, key="high_val", help="价格高于均线该比例时减少定投")
             with col3:
-                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="ma_high_m", help="高估时的定投倍数")
+                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=default_high_m, step=0.1, key="high_m_val", help="高估时的定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -683,25 +732,25 @@ def _render_strategy_config_ui(date_range):
             with col2:
                 st.markdown("—")
             with col3:
-                normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="ma_normal_m", help="正常时的定投倍数")
+                normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=default_normal_m, step=0.1, key="normal_m_val", help="正常时的定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
             with col1:
                 st.markdown("**低估**")
             with col2:
-                low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=DEFAULT_LOW_THRESHOLD, step=1.0, key="ma_low", help="价格低于均线该比例时增加定投")
+                low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=default_low, step=1.0, key="low_val", help="价格低于均线该比例时增加定投")
             with col3:
-                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="ma_low_m", help="低估时的定投倍数")
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=default_low_m, step=0.1, key="low_m_val", help="低估时的定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
             with col1:
                 st.markdown("**极度低估**")
             with col2:
-                extreme_low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=DEFAULT_EXTREME_LOW_THRESHOLD, step=1.0, key="ma_extreme_low", help="价格低于均线该比例时加倍定投")
+                extreme_low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=default_extreme_low, step=1.0, key="extreme_low_val", help="价格低于均线该比例时加倍定投")
             with col3:
-                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="ma_extreme_low_m", help="极度低估时的定投倍数")
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=default_extreme_low_m, step=0.5, key="extreme_low_m_val", help="极度低估时的定投倍数")
             
             config_params['extreme_high_threshold'] = extreme_high_threshold / 100
             config_params['high_threshold'] = high_threshold / 100

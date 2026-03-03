@@ -185,9 +185,9 @@ def run_probability_analysis(df, analysis_start_date, analysis_end_date, investm
     results = []
     total = len(start_dates)
     
-    num_workers = min(multiprocessing.cpu_count(), 8)
+    num_workers = min(multiprocessing.cpu_count() * 2, 16)
     
-    if num_workers > 1 and total > 10:
+    if num_workers > 1 and total > 4:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -445,9 +445,9 @@ def run_smart_probability_analysis(df, analysis_start_date, analysis_end_date, i
     results = []
     total = len(start_dates)
     
-    num_workers = min(multiprocessing.cpu_count(), 8)
+    num_workers = min(multiprocessing.cpu_count() * 2, 16)
     
-    if num_workers > 1 and total > 10:
+    if num_workers > 1 and total > 4:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -511,9 +511,9 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
     smart_results = []
     total = len(start_dates)
     
-    num_workers = min(multiprocessing.cpu_count(), 8)
+    num_workers = min(multiprocessing.cpu_count() * 2, 16)
     
-    if num_workers > 1 and total > 10:
+    if num_workers > 1 and total > 4:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
         def run_comparison_single(start_date):

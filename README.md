@@ -182,8 +182,17 @@ Excel 文件应包含以下两列：
 
 ```
 红利trae_seed2/
-├── dip_investment_backtest.py    # 主程序文件
+├── dip_investment_backtest.py    # 主程序入口
 ├── data_converter.py             # 数据格式转换工具
+├── modules/                       # 功能模块目录
+│   ├── __init__.py               # 模块初始化
+│   ├── config.py                 # 配置常量
+│   ├── data_loader.py            # 数据加载
+│   ├── investment.py             # 投资计算核心
+│   ├── fee_calculator.py         # 费用计算
+│   ├── risk_analyzer.py          # 风险分析
+│   ├── chart_renderer.py         # 图表渲染
+│   └── ui_components.py          # UI组件
 ├── 原始数据/                      # 中证指数原始数据
 ├── 可用数据/                      # 转换后的可用数据
 ├── README.md                      # 说明文档

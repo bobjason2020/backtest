@@ -234,39 +234,40 @@ def _render_probability_analysis_ui(df, date_range):
 
 
 def _render_realistic_params():
-    st.subheader("基金现实因素")
-    consider_realistic = st.checkbox("考虑基金现实因素", value=True)
-    
     realistic_params = None
-    if consider_realistic:
-        st.markdown("**费用参数**")
-        col_fee1, col_fee2 = st.columns(2)
-        with col_fee1:
-            management_fee = st.number_input("管理费率（年化%）", min_value=0.0, max_value=10.0, value=DEFAULT_MANAGEMENT_FEE, step=0.01)
-        with col_fee2:
-            custody_fee = st.number_input("托管费率（年化%）", min_value=0.0, max_value=1.0, value=DEFAULT_CUSTODY_FEE, step=0.01)
+    
+    with st.popover("⚙️ 基金现实因素", use_container_width=True):
+        consider_realistic = st.checkbox("考虑基金现实因素", value=True)
         
-        col_fee3, col_fee4 = st.columns(2)
-        with col_fee3:
-            purchase_fee = st.number_input("申购费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_PURCHASE_FEE, step=0.01)
-        with col_fee4:
-            redemption_fee = st.number_input("赎回费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_REDEMPTION_FEE, step=0.01)
-        
-        st.markdown("**跟踪因素**")
-        cash_ratio = st.number_input("现金比例（%）", min_value=0.0, max_value=20.0, value=DEFAULT_CASH_RATIO, step=0.1)
-        
-        tracking_error_mode = st.radio("跟踪误差模式", ["固定折扣", "随机模拟"], horizontal=True)
-        tracking_error = st.number_input("跟踪误差（年化%）", min_value=0.0, max_value=5.0, value=DEFAULT_TRACKING_ERROR, step=0.01)
-        
-        realistic_params = {
-            'management_fee': management_fee / 100,
-            'custody_fee': custody_fee / 100,
-            'purchase_fee': purchase_fee / 100,
-            'redemption_fee': redemption_fee / 100,
-            'cash_ratio': cash_ratio / 100,
-            'tracking_error': tracking_error / 100,
-            'tracking_error_mode': tracking_error_mode
-        }
+        if consider_realistic:
+            st.markdown("**费用参数**")
+            col_fee1, col_fee2 = st.columns(2)
+            with col_fee1:
+                management_fee = st.number_input("管理费率（年化%）", min_value=0.0, max_value=10.0, value=DEFAULT_MANAGEMENT_FEE, step=0.01)
+            with col_fee2:
+                custody_fee = st.number_input("托管费率（年化%）", min_value=0.0, max_value=1.0, value=DEFAULT_CUSTODY_FEE, step=0.01)
+            
+            col_fee3, col_fee4 = st.columns(2)
+            with col_fee3:
+                purchase_fee = st.number_input("申购费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_PURCHASE_FEE, step=0.01)
+            with col_fee4:
+                redemption_fee = st.number_input("赎回费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_REDEMPTION_FEE, step=0.01)
+            
+            st.markdown("**跟踪因素**")
+            cash_ratio = st.number_input("现金比例（%）", min_value=0.0, max_value=20.0, value=DEFAULT_CASH_RATIO, step=0.1)
+            
+            tracking_error_mode = st.radio("跟踪误差模式", ["固定折扣", "随机模拟"], horizontal=True)
+            tracking_error = st.number_input("跟踪误差（年化%）", min_value=0.0, max_value=5.0, value=DEFAULT_TRACKING_ERROR, step=0.01)
+            
+            realistic_params = {
+                'management_fee': management_fee / 100,
+                'custody_fee': custody_fee / 100,
+                'purchase_fee': purchase_fee / 100,
+                'redemption_fee': redemption_fee / 100,
+                'cash_ratio': cash_ratio / 100,
+                'tracking_error': tracking_error / 100,
+                'tracking_error_mode': tracking_error_mode
+            }
     
     return realistic_params
 
@@ -617,8 +618,6 @@ def display_probability_analysis_results(stats, results, investment_duration, fr
 
 
 def _render_strategy_config_ui(date_range):
-    st.subheader("智能策略设置")
-    
     strategy_type = st.selectbox("策略类型", STRATEGY_TYPES, index=0, help="选择智能定投策略类型")
     
     config_params = {
@@ -626,233 +625,234 @@ def _render_strategy_config_ui(date_range):
         'base_amount': DEFAULT_AMOUNT
     }
     
-    if strategy_type == "均线偏离":
-        st.markdown("**均线偏离策略参数**")
-        col1, col2 = st.columns(2)
-        with col1:
-            ma_period = st.selectbox("均线周期", MA_PERIODS, index=MA_PERIODS.index(DEFAULT_MA_PERIOD), help="选择移动平均线周期")
-        with col2:
-            st.info("当价格低于均线时增加定投，高于均线时减少定投")
+    with st.popover("⚙️ 智能策略参数设置", use_container_width=True):
+        if strategy_type == "均线偏离":
+            st.markdown("**均线偏离策略参数**")
+            col1, col2 = st.columns(2)
+            with col1:
+                ma_period = st.selectbox("均线周期", MA_PERIODS, index=MA_PERIODS.index(DEFAULT_MA_PERIOD), help="选择移动平均线周期")
+            with col2:
+                st.info("当价格低于均线时增加定投，高于均线时减少定投")
+            
+            config_params['ma_period'] = ma_period
+            
+            st.markdown("**阈值与倍数设置**")
+            st.markdown("*偏离度 = (当前价格 - 均线价格) / 均线价格 × 100%*")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**极度高估**")
+            with col2:
+                extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_HIGH_THRESHOLD, step=1.0, key="ma_extreme_high", help="价格高于均线该比例时暂停定投")
+            with col3:
+                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="ma_extreme_high_m", help="0表示暂停定投")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**高估**")
+            with col2:
+                high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=DEFAULT_HIGH_THRESHOLD, step=1.0, key="ma_high", help="价格高于均线该比例时减少定投")
+            with col3:
+                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="ma_high_m", help="高估时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**正常**")
+            with col2:
+                st.markdown("—")
+            with col3:
+                normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="ma_normal_m", help="正常时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**低估**")
+            with col2:
+                low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=DEFAULT_LOW_THRESHOLD, step=1.0, key="ma_low", help="价格低于均线该比例时增加定投")
+            with col3:
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="ma_low_m", help="低估时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**极度低估**")
+            with col2:
+                extreme_low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=DEFAULT_EXTREME_LOW_THRESHOLD, step=1.0, key="ma_extreme_low", help="价格低于均线该比例时加倍定投")
+            with col3:
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="ma_extreme_low_m", help="极度低估时的定投倍数")
+            
+            config_params['extreme_high_threshold'] = extreme_high_threshold / 100
+            config_params['high_threshold'] = high_threshold / 100
+            config_params['low_threshold'] = low_threshold / 100
+            config_params['extreme_low_threshold'] = extreme_low_threshold / 100
         
-        config_params['ma_period'] = ma_period
+        elif strategy_type == "趋势动量":
+            st.markdown("**趋势动量策略参数**")
+            col1, col2 = st.columns(2)
+            with col1:
+                trend_period = st.number_input("判断周期（天）", min_value=5, max_value=120, value=DEFAULT_TREND_PERIOD, step=5, help="计算过去N天的涨跌幅")
+            with col2:
+                st.info("根据过去一段时间的涨跌幅判断市场状态")
+            
+            config_params['trend_period'] = trend_period
+            
+            st.markdown("**阈值与倍数设置**")
+            st.markdown("*涨跌幅 = (当前价格 - N天前价格) / N天前价格 × 100%*")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**极度高估**")
+            with col2:
+                trend_extreme_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_EXTREME_HIGH_THRESHOLD, step=1.0, key="trend_extreme_high", help="涨幅超过该值时暂停定投")
+            with col3:
+                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="trend_extreme_high_m", help="0表示暂停定投")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**高估**")
+            with col2:
+                trend_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_HIGH_THRESHOLD, step=1.0, key="trend_high", help="涨幅超过该值时减少定投")
+            with col3:
+                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="trend_high_m", help="高估时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**正常**")
+            with col2:
+                st.markdown("—")
+            with col3:
+                normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="trend_normal_m", help="正常时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**低估**")
+            with col2:
+                trend_low_threshold = st.number_input("跌幅≤", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_LOW_THRESHOLD, step=1.0, key="trend_low", help="跌幅超过该值时增加定投")
+            with col3:
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="trend_low_m", help="低估时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**极度低估**")
+            with col2:
+                trend_extreme_low_threshold = st.number_input("跌幅≤", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_EXTREME_LOW_THRESHOLD, step=1.0, key="trend_extreme_low", help="跌幅超过该值时加倍定投")
+            with col3:
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="trend_extreme_low_m", help="极度低估时的定投倍数")
+            
+            config_params['trend_extreme_high_threshold'] = trend_extreme_high_threshold / 100
+            config_params['trend_high_threshold'] = trend_high_threshold / 100
+            config_params['trend_low_threshold'] = trend_low_threshold / 100
+            config_params['trend_extreme_low_threshold'] = trend_extreme_low_threshold / 100
         
-        st.markdown("**阈值与倍数设置**")
-        st.markdown("*偏离度 = (当前价格 - 均线价格) / 均线价格 × 100%*")
+        elif strategy_type == "估值分位":
+            st.markdown("**估值分位策略参数**")
+            
+            if not date_range.get('has_valuation', False):
+                st.warning("当前数据不包含估值信息（PE/PB），将无法使用估值策略")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                valuation_options = VALUATION_COLUMNS if date_range.get('has_valuation', False) else VALUATION_COLUMNS
+                valuation_column = st.selectbox("估值指标", valuation_options, index=0, help="选择估值指标")
+            with col2:
+                st.info("根据估值历史分位数调整定投金额")
+            
+            config_params['valuation_column'] = valuation_column
+            
+            st.markdown("**阈值与倍数设置**")
+            st.markdown("*分位数 = 当前估值在历史估值中的排名位置*")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**极度高估**")
+            with col2:
+                extreme_high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_EXTREME_HIGH_PERCENTILE, step=5.0, key="val_extreme_high", help="估值高于该分位时暂停定投")
+            with col3:
+                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="val_extreme_high_m", help="0表示暂停定投")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**高估**")
+            with col2:
+                high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_HIGH_PERCENTILE, step=5.0, key="val_high", help="估值高于该分位时减少定投")
+            with col3:
+                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="val_high_m", help="高估时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**正常**")
+            with col2:
+                st.markdown("—")
+            with col3:
+                normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="val_normal_m", help="正常时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**低估**")
+            with col2:
+                low_percentile = st.number_input("分位≤", min_value=0.0, max_value=50.0, value=DEFAULT_LOW_PERCENTILE, step=5.0, key="val_low", help="估值低于该分位时增加定投")
+            with col3:
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="val_low_m", help="低估时的定投倍数")
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([2, 1, 3])
+            with col1:
+                st.markdown("**极度低估**")
+            with col2:
+                extreme_low_percentile = st.number_input("分位≤", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_LOW_PERCENTILE, step=5.0, key="val_extreme_low", help="估值低于该分位时加倍定投")
+            with col3:
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="val_extreme_low_m", help="极度低估时的定投倍数")
+            
+            config_params['extreme_high_percentile'] = extreme_high_percentile
+            config_params['high_percentile'] = high_percentile
+            config_params['low_percentile'] = low_percentile
+            config_params['extreme_low_percentile'] = extreme_low_percentile
         
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**极度高估**")
-        with col2:
-            extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_HIGH_THRESHOLD, step=1.0, key="ma_extreme_high", help="价格高于均线该比例时暂停定投")
-        with col3:
-            extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="ma_extreme_high_m", help="0表示暂停定投")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**高估**")
-        with col2:
-            high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=DEFAULT_HIGH_THRESHOLD, step=1.0, key="ma_high", help="价格高于均线该比例时减少定投")
-        with col3:
-            high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="ma_high_m", help="高估时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**正常**")
-        with col2:
-            st.markdown("—")
-        with col3:
-            normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="ma_normal_m", help="正常时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**低估**")
-        with col2:
-            low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=DEFAULT_LOW_THRESHOLD, step=1.0, key="ma_low", help="价格低于均线该比例时增加定投")
-        with col3:
-            low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="ma_low_m", help="低估时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**极度低估**")
-        with col2:
-            extreme_low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=DEFAULT_EXTREME_LOW_THRESHOLD, step=1.0, key="ma_extreme_low", help="价格低于均线该比例时加倍定投")
-        with col3:
-            extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="ma_extreme_low_m", help="极度低估时的定投倍数")
-        
-        config_params['extreme_high_threshold'] = extreme_high_threshold / 100
-        config_params['high_threshold'] = high_threshold / 100
-        config_params['low_threshold'] = low_threshold / 100
-        config_params['extreme_low_threshold'] = extreme_low_threshold / 100
-    
-    elif strategy_type == "趋势动量":
-        st.markdown("**趋势动量策略参数**")
-        col1, col2 = st.columns(2)
-        with col1:
-            trend_period = st.number_input("判断周期（天）", min_value=5, max_value=120, value=DEFAULT_TREND_PERIOD, step=5, help="计算过去N天的涨跌幅")
-        with col2:
-            st.info("根据过去一段时间的涨跌幅判断市场状态")
-        
-        config_params['trend_period'] = trend_period
-        
-        st.markdown("**阈值与倍数设置**")
-        st.markdown("*涨跌幅 = (当前价格 - N天前价格) / N天前价格 × 100%*")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**极度高估**")
-        with col2:
-            trend_extreme_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_EXTREME_HIGH_THRESHOLD, step=1.0, key="trend_extreme_high", help="涨幅超过该值时暂停定投")
-        with col3:
-            extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="trend_extreme_high_m", help="0表示暂停定投")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**高估**")
-        with col2:
-            trend_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_HIGH_THRESHOLD, step=1.0, key="trend_high", help="涨幅超过该值时减少定投")
-        with col3:
-            high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="trend_high_m", help="高估时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**正常**")
-        with col2:
-            st.markdown("—")
-        with col3:
-            normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="trend_normal_m", help="正常时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**低估**")
-        with col2:
-            trend_low_threshold = st.number_input("跌幅≤", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_LOW_THRESHOLD, step=1.0, key="trend_low", help="跌幅超过该值时增加定投")
-        with col3:
-            low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="trend_low_m", help="低估时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**极度低估**")
-        with col2:
-            trend_extreme_low_threshold = st.number_input("跌幅≤", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_EXTREME_LOW_THRESHOLD, step=1.0, key="trend_extreme_low", help="跌幅超过该值时加倍定投")
-        with col3:
-            extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="trend_extreme_low_m", help="极度低估时的定投倍数")
-        
-        config_params['trend_extreme_high_threshold'] = trend_extreme_high_threshold / 100
-        config_params['trend_high_threshold'] = trend_high_threshold / 100
-        config_params['trend_low_threshold'] = trend_low_threshold / 100
-        config_params['trend_extreme_low_threshold'] = trend_extreme_low_threshold / 100
-    
-    elif strategy_type == "估值分位":
-        st.markdown("**估值分位策略参数**")
-        
-        if not date_range.get('has_valuation', False):
-            st.warning("当前数据不包含估值信息（PE/PB），将无法使用估值策略")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            valuation_options = VALUATION_COLUMNS if date_range.get('has_valuation', False) else VALUATION_COLUMNS
-            valuation_column = st.selectbox("估值指标", valuation_options, index=0, help="选择估值指标")
-        with col2:
-            st.info("根据估值历史分位数调整定投金额")
-        
-        config_params['valuation_column'] = valuation_column
-        
-        st.markdown("**阈值与倍数设置**")
-        st.markdown("*分位数 = 当前估值在历史估值中的排名位置*")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**极度高估**")
-        with col2:
-            extreme_high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_EXTREME_HIGH_PERCENTILE, step=5.0, key="val_extreme_high", help="估值高于该分位时暂停定投")
-        with col3:
-            extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="val_extreme_high_m", help="0表示暂停定投")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**高估**")
-        with col2:
-            high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_HIGH_PERCENTILE, step=5.0, key="val_high", help="估值高于该分位时减少定投")
-        with col3:
-            high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="val_high_m", help="高估时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**正常**")
-        with col2:
-            st.markdown("—")
-        with col3:
-            normal_multiplier = st.number_input("倍数", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="val_normal_m", help="正常时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**低估**")
-        with col2:
-            low_percentile = st.number_input("分位≤", min_value=0.0, max_value=50.0, value=DEFAULT_LOW_PERCENTILE, step=5.0, key="val_low", help="估值低于该分位时增加定投")
-        with col3:
-            low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="val_low_m", help="低估时的定投倍数")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 3])
-        with col1:
-            st.markdown("**极度低估**")
-        with col2:
-            extreme_low_percentile = st.number_input("分位≤", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_LOW_PERCENTILE, step=5.0, key="val_extreme_low", help="估值低于该分位时加倍定投")
-        with col3:
-            extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="val_extreme_low_m", help="极度低估时的定投倍数")
-        
-        config_params['extreme_high_percentile'] = extreme_high_percentile
-        config_params['high_percentile'] = high_percentile
-        config_params['low_percentile'] = low_percentile
-        config_params['extreme_low_percentile'] = extreme_low_percentile
-    
-    elif strategy_type == "组合策略":
-        st.markdown("**组合策略参数**")
-        st.info("组合策略将同时使用均线偏离和趋势动量策略，取平均信号")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            ma_period = st.selectbox("均线周期", MA_PERIODS, index=MA_PERIODS.index(DEFAULT_MA_PERIOD), key="combo_ma")
-        with col2:
-            trend_period = st.number_input("趋势周期（天）", min_value=5, max_value=120, value=DEFAULT_TREND_PERIOD, step=5, key="combo_trend")
-        
-        config_params['ma_period'] = ma_period
-        config_params['trend_period'] = trend_period
-        config_params['extreme_high_threshold'] = DEFAULT_EXTREME_HIGH_THRESHOLD / 100
-        config_params['high_threshold'] = DEFAULT_HIGH_THRESHOLD / 100
-        config_params['low_threshold'] = DEFAULT_LOW_THRESHOLD / 100
-        config_params['extreme_low_threshold'] = DEFAULT_EXTREME_LOW_THRESHOLD / 100
-        config_params['trend_extreme_high_threshold'] = DEFAULT_TREND_EXTREME_HIGH_THRESHOLD / 100
-        config_params['trend_high_threshold'] = DEFAULT_TREND_HIGH_THRESHOLD / 100
-        config_params['trend_low_threshold'] = DEFAULT_TREND_LOW_THRESHOLD / 100
-        config_params['trend_extreme_low_threshold'] = DEFAULT_TREND_EXTREME_LOW_THRESHOLD / 100
-        
-        st.markdown("**金额调整倍数**")
-        col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-        with col_m1:
-            extreme_high_multiplier = st.number_input("极度高估", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="combo_extreme_high_m")
-        with col_m2:
-            high_multiplier = st.number_input("高估", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="combo_high_m")
-        with col_m3:
-            normal_multiplier = st.number_input("正常", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="combo_normal_m")
-        with col_m4:
-            low_multiplier = st.number_input("低估", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="combo_low_m")
-        with col_m5:
-            extreme_low_multiplier = st.number_input("极度低估", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="combo_extreme_low_m")
+        elif strategy_type == "组合策略":
+            st.markdown("**组合策略参数**")
+            st.info("组合策略将同时使用均线偏离和趋势动量策略，取平均信号")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                ma_period = st.selectbox("均线周期", MA_PERIODS, index=MA_PERIODS.index(DEFAULT_MA_PERIOD), key="combo_ma")
+            with col2:
+                trend_period = st.number_input("趋势周期（天）", min_value=5, max_value=120, value=DEFAULT_TREND_PERIOD, step=5, key="combo_trend")
+            
+            config_params['ma_period'] = ma_period
+            config_params['trend_period'] = trend_period
+            config_params['extreme_high_threshold'] = DEFAULT_EXTREME_HIGH_THRESHOLD / 100
+            config_params['high_threshold'] = DEFAULT_HIGH_THRESHOLD / 100
+            config_params['low_threshold'] = DEFAULT_LOW_THRESHOLD / 100
+            config_params['extreme_low_threshold'] = DEFAULT_EXTREME_LOW_THRESHOLD / 100
+            config_params['trend_extreme_high_threshold'] = DEFAULT_TREND_EXTREME_HIGH_THRESHOLD / 100
+            config_params['trend_high_threshold'] = DEFAULT_TREND_HIGH_THRESHOLD / 100
+            config_params['trend_low_threshold'] = DEFAULT_TREND_LOW_THRESHOLD / 100
+            config_params['trend_extreme_low_threshold'] = DEFAULT_TREND_EXTREME_LOW_THRESHOLD / 100
+            
+            st.markdown("**金额调整倍数**")
+            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+            with col_m1:
+                extreme_high_multiplier = st.number_input("极度高估", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="combo_extreme_high_m")
+            with col_m2:
+                high_multiplier = st.number_input("高估", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="combo_high_m")
+            with col_m3:
+                normal_multiplier = st.number_input("正常", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="combo_normal_m")
+            with col_m4:
+                low_multiplier = st.number_input("低估", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="combo_low_m")
+            with col_m5:
+                extreme_low_multiplier = st.number_input("极度低估", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="combo_extreme_low_m")
     
     config_params['extreme_low_multiplier'] = extreme_low_multiplier
     config_params['low_multiplier'] = low_multiplier

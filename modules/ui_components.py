@@ -1,5 +1,6 @@
 import streamlit as st
 import random
+import os
 from datetime import timedelta
 
 from .config import (
@@ -30,10 +31,23 @@ def render_sidebar():
     with st.sidebar:
         st.header("参数设置")
         
-        uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
+        data_source = st.radio("数据来源", ["上传数据文件", "使用示例数据"], horizontal=True)
+        
+        uploaded_file = None
+        if data_source == "上传数据文件":
+            uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
+        else:
+            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+            if os.path.exists(example_data_path):
+                st.success("✅ 已加载内置示例数据")
+            else:
+                st.warning("⚠️ 示例数据文件不存在，请上传数据文件")
+                data_source = "上传数据文件"
+                uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
         
         params = {
             'uploaded_file': uploaded_file,
+            'data_source': data_source,
             'df': None,
             'date_range': None,
             'start_date': None,
@@ -52,13 +66,17 @@ def render_sidebar():
             'strategy_config': None
         }
         
-        if uploaded_file is not None:
+        df = None
+        error = None
+        
+        if data_source == "使用示例数据":
+            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+            if os.path.exists(example_data_path):
+                df, error = load_excel_file(example_data_path)
+        elif uploaded_file is not None:
             df, error = load_excel_file(uploaded_file)
-            
-            if error:
-                st.error(f"文件读取错误: {error}")
-                return params
-            
+        
+        if df is not None and error is None:
             date_range = get_date_range(df)
             
             valuation_info = ""

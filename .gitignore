@@ -12,6 +12,8 @@ build/
 !可用数据/.gitkeep
 !可用数据/example_data.xlsx
 
+data/ma_strategy_presets.json
+
 .idea/
 .vscode/
 *.swp

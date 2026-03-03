@@ -81,6 +81,9 @@ streamlit run dip_investment_backtest.py
 ### 5. 智能策略参数（可选）
 
 点击"⚙️ 智能策略参数设置"展开详细参数：
+- **预设参数**：提供保守型、均衡型、激进型、长线均线等预设配置
+- **自定义参数**：可手动调整阈值和倍数
+- **保存参数**：支持保存自定义参数配置，方便下次使用
 - 阈值设置：极度高估/高估/正常/低估/极度低估的阈值
 - 倍数设置：对应估值状态的投入倍数
 
@@ -106,6 +109,8 @@ streamlit run dip_investment_backtest.py
 │   ├── fee_calculator.py       # 费用计算模块
 │   ├── chart_renderer.py       # 图表渲染模块
 │   └── ui_components.py        # UI组件模块
+├── data/
+│   └── ma_strategy_presets.json # 用户保存的均线策略预设（不推送）
 ├── 可用数据/
 │   └── example_data.xlsx       # 示例数据
 ├── README.md                   # 项目说明

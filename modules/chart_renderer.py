@@ -497,6 +497,8 @@ def create_amount_distribution_chart(results_df, base_amount):
 
 
 def create_comparison_probability_chart(comparison_stats, realistic_params=None):
+    import numpy as np
+    
     fig = go.Figure()
     
     if realistic_params:
@@ -507,22 +509,41 @@ def create_comparison_probability_chart(comparison_stats, realistic_params=None)
     fixed_df = comparison_stats['fixed_results_df']
     smart_df = comparison_stats['smart_results_df']
     
-    fig.add_trace(go.Histogram(
-        x=fixed_df[return_col],
-        nbinsx=30,
+    fixed_returns = fixed_df[return_col].values
+    smart_returns = smart_df[return_col].values
+    
+    all_returns = np.concatenate([fixed_returns, smart_returns])
+    min_return = np.floor(all_returns.min() / 5) * 5
+    max_return = np.ceil(all_returns.max() / 5) * 5
+    
+    bin_width = 5
+    bin_edges = np.arange(min_return, max_return + bin_width, bin_width)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bar_width = bin_width * 0.4
+    
+    fixed_counts, _ = np.histogram(fixed_returns, bins=bin_edges)
+    smart_counts, _ = np.histogram(smart_returns, bins=bin_edges)
+    
+    fig.add_trace(go.Bar(
+        x=bin_centers - bar_width/2,
+        y=fixed_counts,
+        width=bar_width,
         name='固定定投',
         marker_color='#3498db',
-        opacity=0.6,
-        hovertemplate='固定定投<br>收益区间: %{x:.1f}%<br>频次: %{y}<extra></extra>'
+        opacity=0.8,
+        hovertemplate='固定定投<br>收益区间: %{customdata:.0f}%~%{customdata:.0f}+5%<br>频次: %{y}<extra></extra>',
+        customdata=bin_edges[:-1]
     ))
     
-    fig.add_trace(go.Histogram(
-        x=smart_df[return_col],
-        nbinsx=30,
+    fig.add_trace(go.Bar(
+        x=bin_centers + bar_width/2,
+        y=smart_counts,
+        width=bar_width,
         name='智能定投',
         marker_color='#e74c3c',
-        opacity=0.6,
-        hovertemplate='智能定投<br>收益区间: %{x:.1f}%<br>频次: %{y}<extra></extra>'
+        opacity=0.8,
+        hovertemplate='智能定投<br>收益区间: %{customdata:.0f}%~%{customdata:.0f}+5%<br>频次: %{y}<extra></extra>',
+        customdata=bin_edges[:-1]
     ))
     
     fig.add_vline(x=comparison_stats['fixed_avg_return'], line_dash="dash", line_color="#2980b9", opacity=0.8,
@@ -540,7 +561,7 @@ def create_comparison_probability_chart(comparison_stats, realistic_params=None)
         height=CHART_HEIGHT,
         margin=CHART_MARGIN,
         bargap=0.05,
-        barmode='overlay'
+        barmode='group'
     )
     
     return fig

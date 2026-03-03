@@ -2,9 +2,39 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
+import streamlit as st
+import json
 
 from .investment import get_investment_dates, run_backtest_calculation, run_smart_backtest_calculation
 from .smart_strategy import SmartStrategyConfig, create_strategy
+
+
+def _hash_df(df):
+    if df is None:
+        return "None"
+    return str(pd.util.hash_pandas_object(df).sum())
+
+
+def _hash_params(params):
+    if params is None:
+        return "None"
+    if isinstance(params, dict):
+        return json.dumps(params, sort_keys=True, default=str)
+    return str(params)
+
+
+def _results_to_hashable(results):
+    if not results:
+        return "empty"
+    hash_parts = []
+    for r in results[:10]:
+        hash_parts.append(json.dumps(r, sort_keys=True, default=str))
+    return str(hashsum(hash_parts))
+
+
+def hashsum(parts):
+    import hashlib
+    return hashlib.md5('|'.join(parts).encode()).hexdigest()
 
 
 def get_all_possible_start_dates(df, analysis_start_date, analysis_end_date, investment_duration_years):
@@ -166,6 +196,17 @@ def run_probability_analysis(df, analysis_start_date, analysis_end_date, investm
 
 
 def calculate_probability_statistics(results, realistic_params=None):
+    if not results:
+        return None
+    
+    results_hash = _results_to_hashable(results)
+    params_hash = _hash_params(realistic_params)
+    
+    return _calculate_probability_statistics_cached(results_hash, results, params_hash, realistic_params)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _calculate_probability_statistics_cached(results_hash, results, params_hash, realistic_params=None):
     if not results:
         return None
     
@@ -441,6 +482,18 @@ def run_comparison_probability_analysis(df, analysis_start_date, analysis_end_da
 
 
 def calculate_comparison_statistics(fixed_results, smart_results, realistic_params=None):
+    if not fixed_results or not smart_results:
+        return None
+    
+    fixed_hash = _results_to_hashable(fixed_results)
+    smart_hash = _results_to_hashable(smart_results)
+    params_hash = _hash_params(realistic_params)
+    
+    return _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash, fixed_results, smart_results, realistic_params)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _calculate_comparison_statistics_cached(fixed_hash, smart_hash, params_hash, fixed_results, smart_results, realistic_params=None):
     if not fixed_results or not smart_results:
         return None
     

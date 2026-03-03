@@ -8,7 +8,9 @@ from .config import (
     DEFAULT_MANAGEMENT_FEE, DEFAULT_CUSTODY_FEE,
     DEFAULT_PURCHASE_FEE, DEFAULT_REDEMPTION_FEE,
     DEFAULT_CASH_RATIO, DEFAULT_TRACKING_ERROR,
-    DEFAULT_HOLDING_YEARS, MIN_HOLDING_YEARS, HOLDING_YEARS_STEP
+    DEFAULT_HOLDING_YEARS, MIN_HOLDING_YEARS, HOLDING_YEARS_STEP,
+    DURATION_OPTIONS, DEFAULT_DURATION, MIN_DURATION, MAX_DURATION, DURATION_STEP,
+    SAMPLING_OPTIONS, DEFAULT_SAMPLING
 )
 from .data_loader import load_excel_file, get_date_range
 from .chart_renderer import create_asset_chart, create_price_chart, create_return_chart
@@ -30,7 +32,12 @@ def render_sidebar():
             'freq_param': None,
             'amount': DEFAULT_AMOUNT,
             'realistic_params': None,
-            'run_backtest': False
+            'run_backtest': False,
+            'mode': 'single',
+            'analysis_start_date': None,
+            'analysis_end_date': None,
+            'investment_duration': DEFAULT_DURATION,
+            'sampling': DEFAULT_SAMPLING
         }
         
         if uploaded_file is not None:
@@ -44,114 +51,186 @@ def render_sidebar():
             
             st.success(f"数据加载成功！\n共 {date_range['record_count']} 条记录\n日期范围: {date_range['min_date']} ~ {date_range['max_date']}")
             
-            st.subheader("定投区间")
-            date_mode = st.radio("日期选择方式", ["手动选择日期", "按持有年限", "随机持有年限"], horizontal=True, index=2)
+            st.subheader("分析模式")
+            mode = st.radio("选择模式", ["单次回测", "概率分析"], horizontal=True)
+            params['mode'] = 'single' if mode == "单次回测" else 'probability'
             
-            start_date = None
-            end_date = None
-            
-            if date_mode == "手动选择日期":
-                col1, col2 = st.columns(2)
-                with col1:
-                    start_date = st.date_input("开始日期", value=date_range['min_date'], min_value=date_range['min_date'], max_value=date_range['max_date'])
-                with col2:
-                    end_date = st.date_input("结束日期", value=date_range['max_date'], min_value=date_range['min_date'], max_value=date_range['max_date'])
-            
-            elif date_mode == "按持有年限":
-                start_date = st.date_input("开始日期", value=date_range['min_date'], min_value=date_range['min_date'], max_value=date_range['max_date'])
-                holding_years = st.number_input("持有年限", min_value=MIN_HOLDING_YEARS, max_value=float(int(date_range['max_years'] * 10) / 10), value=DEFAULT_HOLDING_YEARS, step=HOLDING_YEARS_STEP)
-                end_date = start_date + timedelta(days=int(holding_years * 365))
-                if end_date > date_range['max_date']:
-                    end_date = date_range['max_date']
-                    st.warning(f"持有年限超出数据范围，结束日期已调整为 {end_date}")
-                st.info(f"结束日期: {end_date}")
-            
-            elif date_mode == "随机持有年限":
-                holding_years = st.number_input("持有年限", min_value=MIN_HOLDING_YEARS, max_value=float(int(date_range['max_years'] * 10) / 10), value=DEFAULT_HOLDING_YEARS, step=HOLDING_YEARS_STEP)
-                random_seed = st.checkbox("固定随机种子", value=False)
-                if random_seed:
-                    seed_value = st.number_input("随机种子", min_value=0, max_value=99999, value=42, step=1)
-                else:
-                    seed_value = None
-                
-                max_start_date = date_range['max_date'] - timedelta(days=int(holding_years * 365))
-                if max_start_date < date_range['min_date']:
-                    st.warning(f"持有年限 {holding_years} 年超出数据范围，请减小持有年限")
-                    start_date = date_range['min_date']
-                    end_date = date_range['max_date']
-                else:
-                    if seed_value is not None:
-                        random.seed(seed_value)
-                    random_days = random.randint(0, (max_start_date - date_range['min_date']).days)
-                    start_date = date_range['min_date'] + timedelta(days=random_days)
-                    end_date = start_date + timedelta(days=int(holding_years * 365))
-                    if end_date > date_range['max_date']:
-                        end_date = date_range['max_date']
-                    st.info(f"随机选择的时间段:\n开始: {start_date}\n结束: {end_date}")
-            
-            st.subheader("定投频率")
-            freq_type = st.radio("选择频率", ["按日", "按周", "按月", "一次性投入"], horizontal=True, index=1)
-            
-            freq_param = None
-            if freq_type == "按周":
-                freq_param = st.selectbox("选择定投日", WEEKDAYS, index=0)
-            elif freq_type == "按月":
-                freq_param = st.selectbox("选择定投日", MONTH_OPTIONS, index=0)
-            
-            st.subheader("定投金额")
-            amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP)
-            
-            st.subheader("基金现实因素")
-            consider_realistic = st.checkbox("考虑基金现实因素", value=True)
-            
-            realistic_params = None
-            if consider_realistic:
-                st.markdown("**费用参数**")
-                col_fee1, col_fee2 = st.columns(2)
-                with col_fee1:
-                    management_fee = st.number_input("管理费率（年化%）", min_value=0.0, max_value=3.0, value=DEFAULT_MANAGEMENT_FEE, step=0.01)
-                with col_fee2:
-                    custody_fee = st.number_input("托管费率（年化%）", min_value=0.0, max_value=1.0, value=DEFAULT_CUSTODY_FEE, step=0.01)
-                
-                col_fee3, col_fee4 = st.columns(2)
-                with col_fee3:
-                    purchase_fee = st.number_input("申购费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_PURCHASE_FEE, step=0.01)
-                with col_fee4:
-                    redemption_fee = st.number_input("赎回费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_REDEMPTION_FEE, step=0.01)
-                
-                st.markdown("**跟踪因素**")
-                cash_ratio = st.number_input("现金比例（%）", min_value=0.0, max_value=20.0, value=DEFAULT_CASH_RATIO, step=0.1)
-                
-                tracking_error_mode = st.radio("跟踪误差模式", ["固定折扣", "随机模拟"], horizontal=True)
-                tracking_error = st.number_input("跟踪误差（年化%）", min_value=0.0, max_value=5.0, value=DEFAULT_TRACKING_ERROR, step=0.01)
-                
-                realistic_params = {
-                    'management_fee': management_fee / 100,
-                    'custody_fee': custody_fee / 100,
-                    'purchase_fee': purchase_fee / 100,
-                    'redemption_fee': redemption_fee / 100,
-                    'cash_ratio': cash_ratio / 100,
-                    'tracking_error': tracking_error / 100,
-                    'tracking_error_mode': tracking_error_mode
-                }
-            
-            run_backtest = st.button("开始回测", type="primary", use_container_width=True)
-            
-            params.update({
-                'df': df,
-                'date_range': date_range,
-                'start_date': start_date,
-                'end_date': end_date,
-                'freq_type': freq_type,
-                'freq_param': freq_param,
-                'amount': amount,
-                'realistic_params': realistic_params,
-                'run_backtest': run_backtest
-            })
+            if params['mode'] == 'single':
+                params.update(_render_single_backtest_ui(df, date_range))
+            else:
+                params.update(_render_probability_analysis_ui(df, date_range))
         else:
             st.info("请上传 Excel 数据文件")
         
         return params
+
+
+def _render_single_backtest_ui(df, date_range):
+    st.subheader("定投区间")
+    date_mode = st.radio("日期选择方式", ["手动选择日期", "按持有年限", "随机持有年限"], horizontal=True, index=2)
+    
+    start_date = None
+    end_date = None
+    
+    if date_mode == "手动选择日期":
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("开始日期", value=date_range['min_date'], min_value=date_range['min_date'], max_value=date_range['max_date'])
+        with col2:
+            end_date = st.date_input("结束日期", value=date_range['max_date'], min_value=date_range['min_date'], max_value=date_range['max_date'])
+    
+    elif date_mode == "按持有年限":
+        start_date = st.date_input("开始日期", value=date_range['min_date'], min_value=date_range['min_date'], max_value=date_range['max_date'])
+        holding_years = st.number_input("持有年限", min_value=MIN_HOLDING_YEARS, max_value=float(int(date_range['max_years'] * 10) / 10), value=DEFAULT_HOLDING_YEARS, step=HOLDING_YEARS_STEP)
+        end_date = start_date + timedelta(days=int(holding_years * 365))
+        if end_date > date_range['max_date']:
+            end_date = date_range['max_date']
+            st.warning(f"持有年限超出数据范围，结束日期已调整为 {end_date}")
+        st.info(f"结束日期: {end_date}")
+    
+    elif date_mode == "随机持有年限":
+        holding_years = st.number_input("持有年限", min_value=MIN_HOLDING_YEARS, max_value=float(int(date_range['max_years'] * 10) / 10), value=DEFAULT_HOLDING_YEARS, step=HOLDING_YEARS_STEP)
+        random_seed = st.checkbox("固定随机种子", value=False)
+        if random_seed:
+            seed_value = st.number_input("随机种子", min_value=0, max_value=99999, value=42, step=1)
+        else:
+            seed_value = None
+        
+        max_start_date = date_range['max_date'] - timedelta(days=int(holding_years * 365))
+        if max_start_date < date_range['min_date']:
+            st.warning(f"持有年限 {holding_years} 年超出数据范围，请减小持有年限")
+            start_date = date_range['min_date']
+            end_date = date_range['max_date']
+        else:
+            if seed_value is not None:
+                random.seed(seed_value)
+            random_days = random.randint(0, (max_start_date - date_range['min_date']).days)
+            start_date = date_range['min_date'] + timedelta(days=random_days)
+            end_date = start_date + timedelta(days=int(holding_years * 365))
+            if end_date > date_range['max_date']:
+                end_date = date_range['max_date']
+            st.info(f"随机选择的时间段:\n开始: {start_date}\n结束: {end_date}")
+    
+    st.subheader("定投频率")
+    freq_type = st.radio("选择频率", ["按日", "按周", "按月", "一次性投入"], horizontal=True, index=1)
+    
+    freq_param = None
+    if freq_type == "按周":
+        freq_param = st.selectbox("选择定投日", WEEKDAYS, index=0)
+    elif freq_type == "按月":
+        freq_param = st.selectbox("选择定投日", MONTH_OPTIONS, index=0)
+    
+    st.subheader("定投金额")
+    amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP)
+    
+    realistic_params = _render_realistic_params()
+    
+    run_backtest = st.button("开始回测", type="primary", use_container_width=True)
+    
+    return {
+        'df': df,
+        'date_range': date_range,
+        'start_date': start_date,
+        'end_date': end_date,
+        'freq_type': freq_type,
+        'freq_param': freq_param,
+        'amount': amount,
+        'realistic_params': realistic_params,
+        'run_backtest': run_backtest
+    }
+
+
+def _render_probability_analysis_ui(df, date_range):
+    st.subheader("分析时间段")
+    col1, col2 = st.columns(2)
+    with col1:
+        analysis_start_date = st.date_input("分析开始日期", value=date_range['min_date'], min_value=date_range['min_date'], max_value=date_range['max_date'], key="prob_start")
+    with col2:
+        analysis_end_date = st.date_input("分析结束日期", value=date_range['max_date'], min_value=date_range['min_date'], max_value=date_range['max_date'], key="prob_end")
+    
+    st.subheader("定投时长")
+    duration_preset = st.selectbox("选择时长", [f"{y}年" for y in DURATION_OPTIONS] + ["自定义"], index=2)
+    if duration_preset == "自定义":
+        investment_duration = st.number_input("定投时长（年）", min_value=MIN_DURATION, max_value=MAX_DURATION, value=DEFAULT_DURATION, step=DURATION_STEP)
+    else:
+        investment_duration = float(duration_preset.replace("年", ""))
+    
+    max_possible_duration = (analysis_end_date - analysis_start_date).days / 365.0
+    max_data_duration = (date_range['max_date'] - analysis_start_date).days / 365.0
+    if investment_duration > max_data_duration:
+        st.warning(f"定投时长超出数据范围，最大可用时长为 {max_data_duration:.1f} 年")
+        investment_duration = max_data_duration
+    
+    st.subheader("定投频率")
+    freq_type = st.radio("选择频率", ["按日", "按周", "按月", "一次性投入"], horizontal=True, index=2)
+    
+    freq_param = None
+    if freq_type == "按周":
+        freq_param = st.selectbox("选择定投日", WEEKDAYS, index=0, key="prob_freq_week")
+    elif freq_type == "按月":
+        freq_param = st.selectbox("选择定投日", MONTH_OPTIONS, index=0, key="prob_freq_month")
+    
+    st.subheader("定投金额")
+    amount = st.number_input("每次定投金额（元）", min_value=MIN_AMOUNT, max_value=MAX_AMOUNT, value=DEFAULT_AMOUNT, step=AMOUNT_STEP, key="prob_amount")
+    
+    st.subheader("采样设置")
+    sampling = st.selectbox("起始日期采样方式", SAMPLING_OPTIONS, index=0, help="每月采样：每月取一个起始日期；每周采样：每周取一个起始日期；每日采样：每个交易日都作为起始日期（计算较慢）")
+    
+    realistic_params = _render_realistic_params()
+    
+    run_backtest = st.button("开始概率分析", type="primary", use_container_width=True)
+    
+    return {
+        'df': df,
+        'date_range': date_range,
+        'analysis_start_date': analysis_start_date,
+        'analysis_end_date': analysis_end_date,
+        'investment_duration': investment_duration,
+        'freq_type': freq_type,
+        'freq_param': freq_param,
+        'amount': amount,
+        'sampling': sampling,
+        'realistic_params': realistic_params,
+        'run_backtest': run_backtest
+    }
+
+
+def _render_realistic_params():
+    st.subheader("基金现实因素")
+    consider_realistic = st.checkbox("考虑基金现实因素", value=True)
+    
+    realistic_params = None
+    if consider_realistic:
+        st.markdown("**费用参数**")
+        col_fee1, col_fee2 = st.columns(2)
+        with col_fee1:
+            management_fee = st.number_input("管理费率（年化%）", min_value=0.0, max_value=10.0, value=DEFAULT_MANAGEMENT_FEE, step=0.01)
+        with col_fee2:
+            custody_fee = st.number_input("托管费率（年化%）", min_value=0.0, max_value=1.0, value=DEFAULT_CUSTODY_FEE, step=0.01)
+        
+        col_fee3, col_fee4 = st.columns(2)
+        with col_fee3:
+            purchase_fee = st.number_input("申购费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_PURCHASE_FEE, step=0.01)
+        with col_fee4:
+            redemption_fee = st.number_input("赎回费率（%）", min_value=0.0, max_value=2.0, value=DEFAULT_REDEMPTION_FEE, step=0.01)
+        
+        st.markdown("**跟踪因素**")
+        cash_ratio = st.number_input("现金比例（%）", min_value=0.0, max_value=20.0, value=DEFAULT_CASH_RATIO, step=0.1)
+        
+        tracking_error_mode = st.radio("跟踪误差模式", ["固定折扣", "随机模拟"], horizontal=True)
+        tracking_error = st.number_input("跟踪误差（年化%）", min_value=0.0, max_value=5.0, value=DEFAULT_TRACKING_ERROR, step=0.01)
+        
+        realistic_params = {
+            'management_fee': management_fee / 100,
+            'custody_fee': custody_fee / 100,
+            'purchase_fee': purchase_fee / 100,
+            'redemption_fee': redemption_fee / 100,
+            'cash_ratio': cash_ratio / 100,
+            'tracking_error': tracking_error / 100,
+            'tracking_error_mode': tracking_error_mode
+        }
+    
+    return realistic_params
 
 
 def display_summary_metrics(total_investment, final_asset, total_return, avg_cost, 
@@ -379,3 +458,121 @@ def display_results(start_date, end_date, freq_type, freq_param, amount, investm
     
     with col_right:
         display_investment_records(results_df, realistic_params)
+
+
+def display_probability_summary(stats, investment_duration, realistic_params=None):
+    st.subheader("核心概率指标")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        profit_color = "normal" if stats['profit_probability'] >= 50 else "inverse"
+        st.metric("盈利概率", f"{stats['profit_probability']:.1f}%", 
+                  help=f"在 {stats['total_count']} 次模拟中，有 {stats['profit_count']} 次盈利")
+    with col2:
+        st.metric("平均年化收益", f"{stats['avg_annualized']:.2f}%")
+    with col3:
+        st.metric("中位数年化收益", f"{stats['median_annualized']:.2f}%")
+    with col4:
+        st.metric("收益标准差", f"{stats['std_return']:.2f}%")
+    
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("最大累计收益", f"{stats['max_return']:.2f}%")
+    with col6:
+        st.metric("最小累计收益", f"{stats['min_return']:.2f}%")
+    with col7:
+        st.metric("平均定投次数", f"{stats['avg_investment_count']:.0f}次")
+    with col8:
+        st.metric("平均定投时长", f"{stats['avg_years']:.1f}年")
+
+
+def display_cumulative_probability(cumulative_prob):
+    st.subheader("收益概率分布")
+    
+    cols = st.columns(len(cumulative_prob))
+    for i, (threshold, prob) in enumerate(cumulative_prob.items()):
+        with cols[i]:
+            st.metric(threshold, f"{prob:.1f}%")
+
+
+def display_annualized_cumulative_probability(annualized_cumulative_prob):
+    st.subheader("年化收益概率分布")
+    
+    cols = st.columns(len(annualized_cumulative_prob))
+    for i, (threshold, prob) in enumerate(annualized_cumulative_prob.items()):
+        with cols[i]:
+            st.metric(threshold, f"{prob:.1f}%")
+
+
+def display_probability_details(results_df, realistic_params=None):
+    st.subheader("详细数据")
+    
+    display_df = results_df.copy()
+    
+    if realistic_params:
+        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
+                                  'real_final_asset', 'real_total_return', 'real_annualized', 'total_fees']]
+        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
+                              '累计收益率(%)', '年化收益率(%)', '总费用']
+    else:
+        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
+                                  'ideal_final_asset', 'ideal_total_return', 'ideal_annualized']]
+        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
+                              '累计收益率(%)', '年化收益率(%)']
+    
+    display_df['起始日期'] = display_df['起始日期'].astype(str)
+    display_df['结束日期'] = display_df['结束日期'].astype(str)
+    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"¥{x:,.0f}")
+    display_df['期末资产'] = display_df['期末资产'].apply(lambda x: f"¥{x:,.0f}")
+    display_df['累计收益率(%)'] = display_df['累计收益率(%)'].round(2)
+    display_df['年化收益率(%)'] = display_df['年化收益率(%)'].round(2)
+    
+    st.dataframe(display_df, use_container_width=True, height=400)
+
+
+def display_probability_analysis_results(stats, results, investment_duration, freq_type, freq_param, 
+                                         amount, sampling, realistic_params=None):
+    from .chart_renderer import create_return_distribution_chart, create_return_timeline_chart, create_cumulative_probability_chart, create_annualized_distribution_chart
+    
+    st.header(f"概率分析结果（定投时长: {investment_duration}年）")
+    
+    display_probability_summary(stats, investment_duration, realistic_params)
+    
+    st.markdown("---")
+    display_cumulative_probability(stats['cumulative_prob'])
+    
+    st.markdown("---")
+    display_annualized_cumulative_probability(stats['annualized_cumulative_prob'])
+    
+    st.markdown("---")
+    st.subheader("累计收益分布直方图")
+    fig_hist = create_return_distribution_chart(stats, realistic_params)
+    st.plotly_chart(fig_hist, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("年化收益分布直方图")
+    fig_ann_hist = create_annualized_distribution_chart(stats, realistic_params)
+    st.plotly_chart(fig_ann_hist, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("收益随起始日期变化")
+    fig_timeline = create_return_timeline_chart(results, realistic_params)
+    st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("累计概率曲线")
+    fig_cum = create_cumulative_probability_chart(stats, realistic_params)
+    st.plotly_chart(fig_cum, use_container_width=True)
+    
+    st.markdown("---")
+    
+    with st.expander("查看详细数据"):
+        display_probability_details(stats['results_df'], realistic_params)
+    
+    st.markdown("---")
+    st.subheader("分析参数")
+    st.write(f"- 定投时长: {investment_duration}年")
+    st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
+    st.write(f"- 每次定投金额: ¥{amount:,.0f}")
+    st.write(f"- 采样方式: {sampling}")
+    st.write(f"- 模拟次数: {stats['total_count']}次")

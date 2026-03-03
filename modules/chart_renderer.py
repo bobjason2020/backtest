@@ -1,3 +1,4 @@
+import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 
@@ -201,6 +202,156 @@ def create_return_chart(daily_assets_df, realistic_params=None, recovery_date=No
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         height=CHART_HEIGHT,
         margin=CHART_MARGIN
+    )
+    
+    return fig
+
+
+def create_return_distribution_chart(stats, realistic_params=None):
+    fig = go.Figure()
+    
+    return_col = 'real_total_return' if realistic_params else 'ideal_total_return'
+    df = stats['results_df']
+    
+    returns = df[return_col].values
+    
+    fig.add_trace(go.Histogram(
+        x=returns,
+        nbinsx=30,
+        name='收益分布',
+        marker_color='steelblue',
+        opacity=0.75,
+        hovertemplate='收益率区间: %{x}<br>频次: %{y}<extra></extra>'
+    ))
+    
+    fig.add_vline(x=0, line_dash="dash", line_color="red", opacity=0.7)
+    
+    fig.add_vline(x=stats['avg_return'], line_dash="dot", line_color="green", opacity=0.7,
+                  annotation_text=f"平均: {stats['avg_return']:.1f}%",
+                  annotation_position="top right")
+    
+    fig.add_vline(x=stats['median_return'], line_dash="dot", line_color="orange", opacity=0.7,
+                  annotation_text=f"中位数: {stats['median_return']:.1f}%",
+                  annotation_position="top left")
+    
+    fig.update_layout(
+        xaxis_title='累计收益率（%）',
+        yaxis_title='频次',
+        hovermode='x',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        bargap=0.05
+    )
+    
+    return fig
+
+
+def create_return_timeline_chart(results, realistic_params=None):
+    fig = go.Figure()
+    
+    return_col = 'real_total_return' if realistic_params else 'ideal_total_return'
+    annualized_col = 'real_annualized' if realistic_params else 'ideal_annualized'
+    
+    df = pd.DataFrame(results)
+    
+    colors = ['green' if r > 0 else 'red' for r in df[return_col]]
+    
+    fig.add_trace(go.Bar(
+        x=df['start_date'],
+        y=df[return_col],
+        name='累计收益率',
+        marker_color=colors,
+        opacity=0.7,
+        hovertemplate='起始日期: %{x}<br>累计收益率: %{y:.2f}%<extra></extra>'
+    ))
+    
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        xaxis_title='起始日期',
+        yaxis_title='累计收益率（%）',
+        hovermode='x',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        showlegend=False
+    )
+    
+    return fig
+
+
+def create_cumulative_probability_chart(stats, realistic_params=None):
+    fig = go.Figure()
+    
+    df = stats['results_df']
+    return_col = 'real_total_return' if realistic_params else 'ideal_total_return'
+    returns = sorted(df[return_col].values)
+    total = len(returns)
+    
+    thresholds = list(range(-50, 51, 5))
+    actual_thresholds = [t for t in thresholds if t >= min(returns) - 5 and t <= max(returns) + 5]
+    
+    probs = []
+    for t in actual_thresholds:
+        prob = sum(1 for r in returns if r >= t) / total * 100
+        probs.append(prob)
+    
+    fig.add_trace(go.Scatter(
+        x=actual_thresholds,
+        y=probs,
+        mode='lines+markers',
+        name='累计概率',
+        line=dict(color='steelblue', width=2),
+        marker=dict(size=6),
+        hovertemplate='收益率≥%{x}%<br>概率: %{y:.1f}%<extra></extra>'
+    ))
+    
+    fig.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        xaxis_title='收益率阈值（%）',
+        yaxis_title='达到该收益率的概率（%）',
+        hovermode='x',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN
+    )
+    
+    return fig
+
+
+def create_annualized_distribution_chart(stats, realistic_params=None):
+    fig = go.Figure()
+    
+    annualized_col = 'real_annualized' if realistic_params else 'ideal_annualized'
+    df = stats['results_df']
+    
+    annualized_returns = df[annualized_col].values
+    
+    fig.add_trace(go.Histogram(
+        x=annualized_returns,
+        nbinsx=30,
+        name='年化收益分布',
+        marker_color='teal',
+        opacity=0.75,
+        hovertemplate='年化收益率区间: %{x}<br>频次: %{y}<extra></extra>'
+    ))
+    
+    fig.add_vline(x=0, line_dash="dash", line_color="red", opacity=0.7)
+    
+    fig.add_vline(x=stats['avg_annualized'], line_dash="dot", line_color="green", opacity=0.7,
+                  annotation_text=f"平均: {stats['avg_annualized']:.1f}%",
+                  annotation_position="top right")
+    
+    fig.add_vline(x=stats['median_annualized'], line_dash="dot", line_color="orange", opacity=0.7,
+                  annotation_text=f"中位数: {stats['median_annualized']:.1f}%",
+                  annotation_position="top left")
+    
+    fig.update_layout(
+        xaxis_title='年化收益率（%）',
+        yaxis_title='频次',
+        hovermode='x',
+        height=CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        bargap=0.05
     )
     
     return fig

@@ -8,10 +8,7 @@ dist/
 build/
 
 原始数据/*.xlsx
-可用数据/*.xlsx
 !可用数据/.gitkeep
-!可用数据/example_data.xlsx
-!可用数据/example_data2.xlsx
 
 data/ma_strategy_presets.json
 

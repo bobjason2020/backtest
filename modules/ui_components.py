@@ -40,17 +40,20 @@ def _render_data_source_section() -> Dict[str, Any]:
     else:
         example_data_type = st.selectbox(
             "选择示例数据",
-            ["示例数据一：东证红利低波全收益", "示例数据二：沪深300全收益"],
+            ["东证红利低波全收益 (931446)", "沪深300全收益 (000300)", "中概互联 (H30533)"],
             index=0
         )
         
-        if "东证红利低波" in example_data_type:
-            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据")
+        if "931446" in example_data_type:
+            example_data_path = os.path.join(data_dir, "931446perf.xlsx")
+        elif "000300" in example_data_type:
+            example_data_path = os.path.join(data_dir, "000300perf.xlsx")
         else:
-            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data2.xlsx")
+            example_data_path = os.path.join(data_dir, "H30533perf.xlsx")
         
         if os.path.exists(example_data_path):
-            st.success(f"已加载{example_data_type.split('：')[0]}")
+            st.success(f"已加载: {example_data_type}")
         else:
             st.warning(f"示例数据文件不存在，请上传数据文件")
             data_source = "上传数据文件"
@@ -587,10 +590,13 @@ def render_sidebar() -> Dict[str, Any]:
         error = None
         
         if data_source == "使用示例数据":
-            if "东证红利低波" in (example_data_type or ""):
-                example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据")
+            if "931446" in (example_data_type or ""):
+                example_data_path = os.path.join(data_dir, "931446perf.xlsx")
+            elif "000300" in (example_data_type or ""):
+                example_data_path = os.path.join(data_dir, "000300perf.xlsx")
             else:
-                example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data2.xlsx")
+                example_data_path = os.path.join(data_dir, "H30533perf.xlsx")
             if os.path.exists(example_data_path):
                 df, error = load_excel_file(example_data_path)
         elif uploaded_file is not None:

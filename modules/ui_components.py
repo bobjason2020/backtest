@@ -33,20 +33,34 @@ def _render_data_source_section() -> Dict[str, Any]:
     data_source = st.radio("数据来源", ["上传数据文件", "使用示例数据"], horizontal=True)
     
     uploaded_file = None
+    example_data_type = None
+    
     if data_source == "上传数据文件":
         uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
     else:
-        example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
-        if os.path.exists(example_data_path):
-            st.success("已加载内置示例数据")
+        example_data_type = st.selectbox(
+            "选择示例数据",
+            ["示例数据一：东证红利低波全收益", "示例数据二：沪深300全收益"],
+            index=0
+        )
+        
+        if "东证红利低波" in example_data_type:
+            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
         else:
-            st.warning("示例数据文件不存在，请上传数据文件")
+            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data2.xlsx")
+        
+        if os.path.exists(example_data_path):
+            st.success(f"已加载{example_data_type.split('：')[0]}")
+        else:
+            st.warning(f"示例数据文件不存在，请上传数据文件")
             data_source = "上传数据文件"
             uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
+            example_data_type = None
     
     return {
         'data_source': data_source,
-        'uploaded_file': uploaded_file
+        'uploaded_file': uploaded_file,
+        'example_data_type': example_data_type
     }
 
 
@@ -545,10 +559,12 @@ def render_sidebar() -> Dict[str, Any]:
         data_source_result = _render_data_source_section()
         data_source = data_source_result['data_source']
         uploaded_file = data_source_result['uploaded_file']
+        example_data_type = data_source_result.get('example_data_type')
         
         params = {
             'uploaded_file': uploaded_file,
             'data_source': data_source,
+            'example_data_type': example_data_type,
             'df': None,
             'date_range': None,
             'start_date': None,
@@ -571,7 +587,10 @@ def render_sidebar() -> Dict[str, Any]:
         error = None
         
         if data_source == "使用示例数据":
-            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+            if "东证红利低波" in (example_data_type or ""):
+                example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+            else:
+                example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data2.xlsx")
             if os.path.exists(example_data_path):
                 df, error = load_excel_file(example_data_path)
         elif uploaded_file is not None:

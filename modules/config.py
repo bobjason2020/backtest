@@ -1,3 +1,8 @@
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+import json
+
 PAGE_TITLE = "定投收益回测工具"
 PAGE_LAYOUT = "wide"
 SIDEBAR_STATE = "expanded"
@@ -120,29 +125,200 @@ MA_STRATEGY_PRESETS = {
     }
 }
 
-MA_PRESETS_FILE = "data/ma_strategy_presets.json"
+MA_PRESETS_FILE = Path("data/ma_strategy_presets.json")
 
-import json
-import os
 
-def load_custom_presets():
-    if os.path.exists(MA_PRESETS_FILE):
-        try:
-            with open(MA_PRESETS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
+@dataclass
+class ConfigManager:
+    page_title: str = PAGE_TITLE
+    page_layout: str = PAGE_LAYOUT
+    sidebar_state: str = SIDEBAR_STATE
+    
+    default_amount: float = DEFAULT_AMOUNT
+    min_amount: float = MIN_AMOUNT
+    max_amount: float = MAX_AMOUNT
+    amount_step: float = AMOUNT_STEP
+    
+    default_management_fee: float = DEFAULT_MANAGEMENT_FEE
+    default_custody_fee: float = DEFAULT_CUSTODY_FEE
+    default_purchase_fee: float = DEFAULT_PURCHASE_FEE
+    default_redemption_fee: float = DEFAULT_REDEMPTION_FEE
+    default_cash_ratio: float = DEFAULT_CASH_RATIO
+    default_tracking_error: float = DEFAULT_TRACKING_ERROR
+    
+    default_holding_years: float = DEFAULT_HOLDING_YEARS
+    min_holding_years: float = MIN_HOLDING_YEARS
+    holding_years_step: float = HOLDING_YEARS_STEP
+    
+    chart_height: int = CHART_HEIGHT
+    chart_margin: Dict[str, int] = field(default_factory=lambda: dict(CHART_MARGIN))
+    
+    default_duration: float = DEFAULT_DURATION
+    min_duration: float = MIN_DURATION
+    max_duration: float = MAX_DURATION
+    duration_step: float = DURATION_STEP
+    
+    default_sampling: str = DEFAULT_SAMPLING
+    default_strategy: str = DEFAULT_STRATEGY
+    
+    default_ma_period: int = DEFAULT_MA_PERIOD
+    default_extreme_low_threshold: float = DEFAULT_EXTREME_LOW_THRESHOLD
+    default_low_threshold: float = DEFAULT_LOW_THRESHOLD
+    default_high_threshold: float = DEFAULT_HIGH_THRESHOLD
+    default_extreme_high_threshold: float = DEFAULT_EXTREME_HIGH_THRESHOLD
+    
+    default_valuation_column: str = DEFAULT_VALUATION_COLUMN
+    default_extreme_low_percentile: float = DEFAULT_EXTREME_LOW_PERCENTILE
+    default_low_percentile: float = DEFAULT_LOW_PERCENTILE
+    default_high_percentile: float = DEFAULT_HIGH_PERCENTILE
+    default_extreme_high_percentile: float = DEFAULT_EXTREME_HIGH_PERCENTILE
+    
+    default_trend_period: int = DEFAULT_TREND_PERIOD
+    default_trend_extreme_low_threshold: float = DEFAULT_TREND_EXTREME_LOW_THRESHOLD
+    default_trend_low_threshold: float = DEFAULT_TREND_LOW_THRESHOLD
+    default_trend_high_threshold: float = DEFAULT_TREND_HIGH_THRESHOLD
+    default_trend_extreme_high_threshold: float = DEFAULT_TREND_EXTREME_HIGH_THRESHOLD
+    
+    default_extreme_low_multiplier: float = DEFAULT_EXTREME_LOW_MULTIPLIER
+    default_low_multiplier: float = DEFAULT_LOW_MULTIPLIER
+    default_normal_multiplier: float = DEFAULT_NORMAL_MULTIPLIER
+    default_high_multiplier: float = DEFAULT_HIGH_MULTIPLIER
+    default_extreme_high_multiplier: float = DEFAULT_EXTREME_HIGH_MULTIPLIER
+    
+    _custom_config: Dict[str, Any] = field(default_factory=dict)
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        if key in self._custom_config:
+            return self._custom_config[key]
+        if hasattr(self, key):
+            return getattr(self, key)
+        return default
+    
+    def set(self, key: str, value: Any) -> None:
+        self._custom_config[key] = value
+    
+    def validate(self) -> bool:
+        if not (self.min_amount <= self.default_amount <= self.max_amount):
+            return False
+        
+        fee_fields = [
+            'default_management_fee',
+            'default_custody_fee', 
+            'default_purchase_fee',
+            'default_redemption_fee'
+        ]
+        for fee_field in fee_fields:
+            fee_value = getattr(self, fee_field)
+            if not (0 <= fee_value <= 100):
+                return False
+        
+        if self.default_holding_years < self.min_holding_years:
+            return False
+        
+        if not (self.min_duration <= self.default_duration <= self.max_duration):
+            return False
+        
+        if self.default_ma_period <= 0:
+            return False
+        
+        return True
+    
+    def validate_amount(self, amount: float) -> bool:
+        return self.min_amount <= amount <= self.max_amount
+    
+    def validate_fee_rate(self, fee_rate: float) -> bool:
+        return 0 <= fee_rate <= 100
+    
+    def validate_duration(self, duration: float) -> bool:
+        return self.min_duration <= duration <= self.max_duration
+    
+    def validate_holding_years(self, holding_years: float) -> bool:
+        return holding_years >= self.min_holding_years
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = asdict(self)
+        result.pop('_custom_config', None)
+        return result
+    
+    def update_from_dict(self, config_dict: Dict[str, Any]) -> None:
+        for key, value in config_dict.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                self._custom_config[key] = value
+
+
+def load_custom_presets() -> Dict[str, Dict[str, Any]]:
+    if not MA_PRESETS_FILE.exists():
+        return {}
+    try:
+        with open(MA_PRESETS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
             return {}
-    return {}
+    except (json.JSONDecodeError, IOError, PermissionError):
+        return {}
 
-def save_custom_preset(name, params):
-    presets = load_custom_presets()
-    presets[name] = params
-    os.makedirs(os.path.dirname(MA_PRESETS_FILE), exist_ok=True)
-    with open(MA_PRESETS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(presets, f, ensure_ascii=False, indent=2)
 
-def get_all_presets():
+def save_custom_preset(name: str, params: Dict[str, Any]) -> bool:
+    if not name or not isinstance(name, str):
+        return False
+    if not isinstance(params, dict):
+        return False
+    
+    required_keys = [
+        'ma_period', 'extreme_high_threshold', 'extreme_high_multiplier',
+        'high_threshold', 'high_multiplier', 'normal_multiplier',
+        'low_threshold', 'low_multiplier', 'extreme_low_threshold',
+        'extreme_low_multiplier'
+    ]
+    
+    for key in required_keys:
+        if key not in params:
+            return False
+    
+    try:
+        presets = load_custom_presets()
+        presets[name] = params
+        MA_PRESETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(MA_PRESETS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(presets, f, ensure_ascii=False, indent=2)
+        return True
+    except (IOError, PermissionError, json.JSONEncodeError):
+        return False
+
+
+def delete_custom_preset(name: str) -> bool:
+    if not name or not isinstance(name, str):
+        return False
+    
+    try:
+        presets = load_custom_presets()
+        if name not in presets:
+            return False
+        
+        del presets[name]
+        MA_PRESETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(MA_PRESETS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(presets, f, ensure_ascii=False, indent=2)
+        return True
+    except (IOError, PermissionError, json.JSONEncodeError):
+        return False
+
+
+def get_all_presets() -> Dict[str, Dict[str, Any]]:
     all_presets = MA_STRATEGY_PRESETS.copy()
     custom = load_custom_presets()
     all_presets.update(custom)
     return all_presets
+
+
+_config_manager_instance: Optional[ConfigManager] = None
+
+
+def get_config_manager() -> ConfigManager:
+    global _config_manager_instance
+    if _config_manager_instance is None:
+        _config_manager_instance = ConfigManager()
+    return _config_manager_instance

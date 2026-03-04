@@ -2,6 +2,7 @@ import streamlit as st
 import random
 import os
 from datetime import timedelta
+from typing import Dict, Any, Optional
 
 from .config import (
     WEEKDAYS, MONTH_OPTIONS,
@@ -28,80 +29,28 @@ from .chart_renderer import create_asset_chart, create_price_chart, create_retur
 from .smart_strategy import SmartStrategyConfig
 
 
-def render_sidebar():
-    with st.sidebar:
-        st.header("参数设置")
-        
-        data_source = st.radio("数据来源", ["上传数据文件", "使用示例数据"], horizontal=True)
-        
-        uploaded_file = None
-        if data_source == "上传数据文件":
+def _render_data_source_section() -> Dict[str, Any]:
+    data_source = st.radio("数据来源", ["上传数据文件", "使用示例数据"], horizontal=True)
+    
+    uploaded_file = None
+    if data_source == "上传数据文件":
+        uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
+    else:
+        example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+        if os.path.exists(example_data_path):
+            st.success("已加载内置示例数据")
+        else:
+            st.warning("示例数据文件不存在，请上传数据文件")
+            data_source = "上传数据文件"
             uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
-        else:
-            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
-            if os.path.exists(example_data_path):
-                st.success("✅ 已加载内置示例数据")
-            else:
-                st.warning("⚠️ 示例数据文件不存在，请上传数据文件")
-                data_source = "上传数据文件"
-                uploaded_file = st.file_uploader("选择数据文件", type=["xlsx"])
-        
-        params = {
-            'uploaded_file': uploaded_file,
-            'data_source': data_source,
-            'df': None,
-            'date_range': None,
-            'start_date': None,
-            'end_date': None,
-            'freq_type': None,
-            'freq_param': None,
-            'amount': DEFAULT_AMOUNT,
-            'realistic_params': None,
-            'run_backtest': False,
-            'mode': 'single',
-            'analysis_start_date': None,
-            'analysis_end_date': None,
-            'investment_duration': DEFAULT_DURATION,
-            'sampling': DEFAULT_SAMPLING,
-            'strategy_mode': 'fixed',
-            'strategy_config': None
-        }
-        
-        df = None
-        error = None
-        
-        if data_source == "使用示例数据":
-            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
-            if os.path.exists(example_data_path):
-                df, error = load_excel_file(example_data_path)
-        elif uploaded_file is not None:
-            df, error = load_excel_file(uploaded_file)
-        
-        if df is not None and error is None:
-            date_range = get_date_range(df)
-            
-            valuation_info = ""
-            if date_range.get('has_valuation', False):
-                valuation_info = f"\n包含估值数据: {', '.join(date_range['valuation_columns'])}"
-            
-            st.success(f"数据加载成功！\n共 {date_range['record_count']} 条记录\n日期范围: {date_range['min_date']} ~ {date_range['max_date']}{valuation_info}")
-            
-            st.subheader("分析模式")
-            mode = st.radio("选择模式", ["单次回测", "概率分析"], horizontal=True)
-            mode_map = {"单次回测": "single", "概率分析": "probability"}
-            params['mode'] = mode_map.get(mode, "single")
-            
-            if params['mode'] == 'single':
-                params.update(_render_single_backtest_ui(df, date_range))
-            else:
-                params.update(_render_probability_analysis_ui(df, date_range))
-        else:
-            st.info("请上传 Excel 数据文件")
-        
-        return params
+    
+    return {
+        'data_source': data_source,
+        'uploaded_file': uploaded_file
+    }
 
 
-def _render_single_backtest_ui(df, date_range):
+def _render_single_backtest_ui(df, date_range) -> Dict[str, Any]:
     st.subheader("定投区间")
     date_mode = st.radio("日期选择方式", ["手动选择日期", "按持有年限", "随机持有年限"], horizontal=True, index=2)
     
@@ -188,7 +137,7 @@ def _render_single_backtest_ui(df, date_range):
     }
 
 
-def _render_probability_analysis_ui(df, date_range):
+def _render_probability_analysis_ui(df, date_range) -> Dict[str, Any]:
     st.subheader("分析时间段")
     col1, col2 = st.columns(2)
     with col1:
@@ -253,10 +202,10 @@ def _render_probability_analysis_ui(df, date_range):
     }
 
 
-def _render_realistic_params():
+def _render_realistic_params() -> Optional[Dict[str, Any]]:
     realistic_params = None
     
-    with st.popover("⚙️ 基金现实因素", use_container_width=True):
+    with st.popover("基金现实因素", use_container_width=True):
         consider_realistic = st.checkbox("考虑基金现实因素", value=True)
         
         if consider_realistic:
@@ -292,362 +241,7 @@ def _render_realistic_params():
     return realistic_params
 
 
-def display_summary_metrics(total_investment, final_asset, total_return, avg_cost, 
-                           dip_annualized, lump_annualized, years, investment_count):
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("总投入本金", f"¥{total_investment:,.2f}")
-    with col2:
-        st.metric("期末总资产", f"¥{final_asset:,.2f}")
-    with col3:
-        st.metric("累计收益率", f"{total_return:.2f}%")
-    with col4:
-        st.metric("平均持仓成本", f"¥{avg_cost:,.2f}")
-    
-    col5, col6, col7, col8 = st.columns(4)
-    with col5:
-        st.metric("定投年化收益率", f"{dip_annualized:.2f}%", help="基于定投区间总时间计算的年化收益率")
-    with col6:
-        st.metric("一次性投入年化收益率", f"{lump_annualized:.2f}%", help="假设在开始日期一次性投入的年化收益率")
-    with col7:
-        st.metric("定投时长", f"{years:.2f}年")
-    with col8:
-        st.metric("定投次数", f"{investment_count}次")
-
-
-def display_risk_metrics(risk_metrics):
-    col_risk1, col_risk2, col_risk3, col_risk4 = st.columns(4)
-    with col_risk1:
-        st.metric("最大亏损", f"{risk_metrics['max_drawdown']:.2f}%", help="相对于投入本金的最大亏损百分比")
-    with col_risk2:
-        st.metric("最大回撤", f"{risk_metrics['max_pullback']:.2f}%", help="从历史最高点到后续最低点的最大跌幅")
-    with col_risk3:
-        st.metric("累计亏损时长", f"{risk_metrics['loss_days']}天", help="累计收益率为负的总天数")
-    with col_risk4:
-        st.metric("亏损时长占比", f"{risk_metrics['loss_ratio']:.1f}%", help="亏损天数占总交易日的比例")
-    
-    col_risk5, col_risk6 = st.columns(2)
-    with col_risk5:
-        if risk_metrics['recovery_days'] is not None:
-            st.metric("回本时间", f"{risk_metrics['recovery_days']}天", help="从开始投资到再也不亏损所用的时间")
-        else:
-            st.metric("回本时间", "未回本", help="整个投资期间未能回本")
-    with col_risk6:
-        if risk_metrics['recovery_date'] is not None:
-            st.metric("回本日期", f"{risk_metrics['recovery_date'].date()}")
-        else:
-            st.metric("回本日期", "未回本")
-
-
-def display_comparison_metrics(ideal_final_asset, ideal_total_return, ideal_annualized,
-                               real_final_asset, real_total_return, real_annualized):
-    st.markdown("---")
-    st.subheader("理想收益 vs 实际收益")
-    col9, col10, col11, col12 = st.columns(4)
-    with col9:
-        st.metric("理想期末资产", f"¥{ideal_final_asset:,.2f}")
-    with col10:
-        st.metric("理想累计收益率", f"{ideal_total_return:.2f}%")
-    with col11:
-        st.metric("理想年化收益率", f"{ideal_annualized:.2f}%")
-    with col12:
-        st.empty()
-    
-    col13, col14, col15, col16 = st.columns(4)
-    with col13:
-        st.metric("实际期末资产", f"¥{real_final_asset:,.2f}", f"-{ideal_final_asset - real_final_asset:,.2f}")
-    with col14:
-        st.metric("实际累计收益率", f"{real_total_return:.2f}%", f"-{ideal_total_return - real_total_return:.2f}%")
-    with col15:
-        st.metric("实际年化收益率", f"{real_annualized:.2f}%", f"-{ideal_annualized - real_annualized:.2f}%")
-    with col16:
-        st.empty()
-
-
-def display_fee_details(total_purchase_fee, total_management_fee, redemption_fee, total_fees):
-    st.markdown("---")
-    st.subheader("费用明细")
-    col_fee1, col_fee2, col_fee3, col_fee4 = st.columns(4)
-    with col_fee1:
-        st.metric("累计申购费", f"¥{total_purchase_fee:,.2f}")
-    with col_fee2:
-        st.metric("累计管理费", f"¥{total_management_fee:,.2f}", help="含管理费和托管费")
-    with col_fee3:
-        st.metric("赎回费用", f"¥{redemption_fee:,.2f}")
-    with col_fee4:
-        st.metric("总费用", f"¥{total_fees:,.2f}")
-
-
-def display_parameters_summary(start_date, end_date, freq_type, freq_param, amount, 
-                               investment_dates, real_shares, last_price, first_price, 
-                               realistic_params=None):
-    st.subheader("回测参数汇总")
-    st.write(f"- 定投区间: {start_date} ~ {end_date}")
-    st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
-    st.write(f"- 每次定投金额: ¥{amount:,.2f}")
-    st.write(f"- 定投次数: {len(investment_dates)} 次")
-    st.write(f"- 累计份额: {real_shares:,.4f} 份")
-    st.write(f"- 期末收盘价: ¥{last_price:,.2f}")
-    st.write(f"- 期初收盘价: ¥{first_price:,.2f}")
-    
-    if realistic_params:
-        st.write("---")
-        st.write("**基金现实因素参数:**")
-        st.write(f"- 管理费率: {realistic_params['management_fee']*100:.2f}%")
-        st.write(f"- 托管费率: {realistic_params['custody_fee']*100:.2f}%")
-        st.write(f"- 申购费率: {realistic_params['purchase_fee']*100:.2f}%")
-        st.write(f"- 赎回费率: {realistic_params['redemption_fee']*100:.2f}%")
-        st.write(f"- 现金比例: {realistic_params['cash_ratio']*100:.1f}%")
-        st.write(f"- 跟踪误差: {realistic_params['tracking_error']*100:.2f}% ({realistic_params['tracking_error_mode']})")
-
-
-def display_investment_records(results_df, realistic_params=None):
-    st.subheader("定投记录明细")
-    display_df = results_df.copy()
-    display_df['日期'] = display_df['日期'].astype(str)
-    display_df['收盘价'] = display_df['收盘价'].round(2)
-    display_df['买入份额'] = display_df['买入份额'].round(4)
-    display_df['累计份额'] = display_df['累计份额'].round(4)
-    display_df['投入金额'] = display_df['投入金额'].apply(lambda x: f"¥{x:,.2f}")
-    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"¥{x:,.2f}")
-    
-    if realistic_params:
-        display_df['申购费用'] = display_df['申购费用'].apply(lambda x: f"¥{x:,.2f}")
-        st.dataframe(
-            display_df[['日期', '收盘价', '投入金额', '申购费用', '买入份额', '累计份额', '累计投入']],
-            use_container_width=True,
-            height=300
-        )
-    else:
-        st.dataframe(
-            display_df[['日期', '收盘价', '投入金额', '买入份额', '累计份额', '累计投入']],
-            use_container_width=True,
-            height=300
-        )
-
-
-def display_results(start_date, end_date, freq_type, freq_param, amount, investment_dates,
-                   results_df, daily_assets_df, total_shares_ideal, total_investment, 
-                   total_purchase_fee, realistic_params, risk_metrics, lump_total_return, 
-                   lump_annualized):
-    
-    st.header(f"回测结果（{start_date} ~ {end_date}）")
-    
-    last_row = daily_assets_df.iloc[-1]
-    last_price = last_row['收盘价']
-    first_price = daily_assets_df.iloc[0]['收盘价']
-    
-    ideal_final_asset = last_row['理想持仓市值']
-    ideal_total_return = (ideal_final_asset - total_investment) / total_investment * 100
-    ideal_avg_cost = total_investment / total_shares_ideal if total_shares_ideal > 0 else 0
-    
-    days = (end_date - start_date).days
-    years = days / 365.0 if days > 0 else 0
-    ideal_dip_annualized = ((1 + ideal_total_return / 100) ** (1 / years) - 1) * 100 if years > 0 else 0
-    
-    if realistic_params:
-        real_final_asset = last_row['实际持仓市值']
-        real_shares = last_row['实际持仓份额']
-        total_management_fee = last_row['累计管理费']
-        
-        redemption_fee = real_final_asset * realistic_params.get('redemption_fee', 0)
-        final_asset_after_redemption = real_final_asset - redemption_fee
-        
-        real_total_return = (final_asset_after_redemption - total_investment) / total_investment * 100
-        real_avg_cost = total_investment / real_shares if real_shares > 0 else 0
-        
-        total_fees = total_purchase_fee + total_management_fee + redemption_fee
-        
-        real_dip_annualized = ((1 + real_total_return / 100) ** (1 / years) - 1) * 100 if years > 0 else 0
-        
-        display_summary_metrics(
-            total_investment, final_asset_after_redemption, real_total_return, real_avg_cost,
-            real_dip_annualized, lump_annualized, years, len(investment_dates)
-        )
-        
-        st.markdown("---")
-        st.subheader("投资风险")
-        display_risk_metrics(risk_metrics)
-        
-        display_comparison_metrics(
-            ideal_final_asset, ideal_total_return, ideal_dip_annualized,
-            final_asset_after_redemption, real_total_return, real_dip_annualized
-        )
-        
-        display_fee_details(total_purchase_fee, total_management_fee, redemption_fee, total_fees)
-    else:
-        real_shares = total_shares_ideal
-        
-        display_summary_metrics(
-            total_investment, ideal_final_asset, ideal_total_return, ideal_avg_cost,
-            ideal_dip_annualized, lump_annualized, years, len(investment_dates)
-        )
-        
-        st.markdown("---")
-        st.subheader("投资风险")
-        display_risk_metrics(risk_metrics)
-    
-    st.markdown("---")
-    
-    st.subheader("资产变动曲线")
-    fig1 = create_asset_chart(daily_assets_df, realistic_params)
-    st.plotly_chart(fig1, use_container_width=True)
-    
-    st.markdown("---")
-    
-    st.subheader("指数收盘价与持仓均价")
-    fig2 = create_price_chart(daily_assets_df, realistic_params)
-    st.plotly_chart(fig2, use_container_width=True)
-    
-    st.markdown("---")
-    
-    st.subheader("累计收益率曲线")
-    fig3 = create_return_chart(daily_assets_df, realistic_params, risk_metrics['recovery_date'])
-    st.plotly_chart(fig3, use_container_width=True)
-    
-    st.markdown("---")
-    
-    col_left, col_right = st.columns([1, 1])
-    
-    with col_left:
-        display_parameters_summary(
-            start_date, end_date, freq_type, freq_param, amount,
-            investment_dates, real_shares, last_price, first_price, realistic_params
-        )
-    
-    with col_right:
-        display_investment_records(results_df, realistic_params)
-
-
-def display_probability_summary(stats, investment_duration, realistic_params=None):
-    st.subheader("核心概率指标")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        profit_color = "normal" if stats['profit_probability'] >= 50 else "inverse"
-        st.metric("盈利概率", f"{stats['profit_probability']:.1f}%", 
-                  help=f"在 {stats['total_count']} 次模拟中，有 {stats['profit_count']} 次盈利")
-    with col2:
-        st.metric("平均年化收益", f"{stats['avg_annualized']:.2f}%")
-    with col3:
-        st.metric("中位数年化收益", f"{stats['median_annualized']:.2f}%")
-    with col4:
-        st.metric("收益标准差", f"{stats['std_return']:.2f}%")
-    
-    col5, col6, col7, col8 = st.columns(4)
-    with col5:
-        st.metric("最大累计收益", f"{stats['max_return']:.2f}%")
-    with col6:
-        st.metric("最小累计收益", f"{stats['min_return']:.2f}%")
-    with col7:
-        st.metric("平均定投次数", f"{stats['avg_investment_count']:.0f}次")
-    with col8:
-        st.metric("平均定投时长", f"{stats['avg_years']:.1f}年")
-
-
-def display_cumulative_probability(cumulative_prob):
-    st.subheader("收益概率分布")
-    
-    cols = st.columns(len(cumulative_prob))
-    for i, (threshold, prob) in enumerate(cumulative_prob.items()):
-        with cols[i]:
-            st.metric(threshold, f"{prob:.1f}%")
-
-
-def display_annualized_cumulative_probability(annualized_cumulative_prob):
-    st.subheader("年化收益概率分布")
-    
-    cols = st.columns(len(annualized_cumulative_prob))
-    for i, (threshold, prob) in enumerate(annualized_cumulative_prob.items()):
-        with cols[i]:
-            st.metric(threshold, f"{prob:.1f}%")
-
-
-def display_probability_details(results_df, realistic_params=None, use_cash_flow=False):
-    st.subheader("详细数据")
-    
-    display_df = results_df.copy()
-    
-    if use_cash_flow and 'total_return_with_cash' in display_df.columns:
-        return_col = 'total_return_with_cash'
-        annualized_col = 'annualized_with_cash'
-        asset_col = 'total_asset_with_cash'
-        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_deposited', 
-                                  asset_col, return_col, annualized_col, 'cash_balance']]
-        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
-                              '累计收益率(%)', '年化收益率(%)', '现金余额']
-    elif realistic_params:
-        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
-                                  'real_final_asset', 'real_total_return', 'real_annualized', 'total_fees']]
-        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
-                              '累计收益率(%)', '年化收益率(%)', '总费用']
-    else:
-        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
-                                  'ideal_final_asset', 'ideal_total_return', 'ideal_annualized']]
-        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
-                              '累计收益率(%)', '年化收益率(%)']
-    
-    display_df['起始日期'] = display_df['起始日期'].astype(str)
-    display_df['结束日期'] = display_df['结束日期'].astype(str)
-    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"¥{x:,.0f}")
-    display_df['期末资产'] = display_df['期末资产'].apply(lambda x: f"¥{x:,.0f}")
-    if use_cash_flow and '现金余额' in display_df.columns:
-        display_df['现金余额'] = display_df['现金余额'].apply(lambda x: f"¥{x:,.0f}")
-    display_df['累计收益率(%)'] = display_df['累计收益率(%)'].round(2)
-    display_df['年化收益率(%)'] = display_df['年化收益率(%)'].round(2)
-    
-    st.dataframe(display_df, use_container_width=True, height=400)
-
-
-def display_probability_analysis_results(stats, results, investment_duration, freq_type, freq_param, 
-                                         amount, sampling, realistic_params=None, use_cash_flow=False):
-    from .chart_renderer import create_return_distribution_chart, create_return_timeline_chart, create_cumulative_probability_chart, create_annualized_distribution_chart
-    
-    st.header(f"概率分析结果（定投时长: {investment_duration}年）")
-    
-    display_probability_summary(stats, investment_duration, realistic_params)
-    
-    st.markdown("---")
-    display_cumulative_probability(stats['cumulative_prob'])
-    
-    st.markdown("---")
-    display_annualized_cumulative_probability(stats['annualized_cumulative_prob'])
-    
-    st.markdown("---")
-    st.subheader("累计收益分布直方图")
-    fig_hist = create_return_distribution_chart(stats, realistic_params, use_cash_flow)
-    st.plotly_chart(fig_hist, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("年化收益分布直方图")
-    fig_ann_hist = create_annualized_distribution_chart(stats, realistic_params, use_cash_flow)
-    st.plotly_chart(fig_ann_hist, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("收益随起始日期变化")
-    fig_timeline = create_return_timeline_chart(results, realistic_params, use_cash_flow)
-    st.plotly_chart(fig_timeline, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("累计概率曲线")
-    fig_cum = create_cumulative_probability_chart(stats, realistic_params, use_cash_flow)
-    st.plotly_chart(fig_cum, use_container_width=True)
-    
-    st.markdown("---")
-    
-    with st.expander("查看详细数据"):
-        display_probability_details(stats['results_df'], realistic_params, use_cash_flow)
-    
-    st.markdown("---")
-    st.subheader("分析参数")
-    st.write(f"- 定投时长: {investment_duration}年")
-    st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
-    st.write(f"- 每次定投金额: ¥{amount:,.0f}")
-    st.write(f"- 采样方式: {sampling}")
-    st.write(f"- 模拟次数: {stats['total_count']}次")
-
-
-def _render_strategy_config_ui(date_range):
+def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
     strategy_type = st.selectbox("策略类型", STRATEGY_TYPES, index=0, help="选择智能定投策略类型")
     
     config_params = {
@@ -655,7 +249,7 @@ def _render_strategy_config_ui(date_range):
         'base_amount': DEFAULT_AMOUNT
     }
     
-    with st.popover("⚙️ 智能策略参数设置", use_container_width=True):
+    with st.popover("智能策略参数设置", use_container_width=True):
         if strategy_type == "均线偏离":
             st.markdown("**均线偏离策略参数**")
             
@@ -718,14 +312,14 @@ def _render_strategy_config_ui(date_range):
             config_params['ma_period'] = ma_period
             
             st.markdown("**阈值与倍数设置**")
-            st.markdown("*偏离度 = (当前价格 - 均线价格) / 均线价格 × 100%*")
+            st.markdown("*偏离度 = (当前价格 - 均线价格) / 均线价格 x 100%*")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_extreme_high, step=1.0, key="extreme_high_val", help="价格高于均线该比例时触发")
+                extreme_high_threshold = st.number_input("偏离>=", min_value=0.0, max_value=50.0, value=default_extreme_high, step=1.0, key="extreme_high_val", help="价格高于均线该比例时触发")
             with col3:
                 extreme_high_multiplier = st.number_input("倍数", min_value=-1.0, max_value=1.0, value=default_extreme_high_m, step=0.1, key="extreme_high_m_val", help="负数表示止盈卖出比例，0表示暂停定投")
             
@@ -734,7 +328,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**高估**")
             with col2:
-                high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_high, step=1.0, key="high_val", help="价格高于均线该比例时减少定投")
+                high_threshold = st.number_input("偏离>=", min_value=0.0, max_value=50.0, value=default_high, step=1.0, key="high_val", help="价格高于均线该比例时减少定投")
             with col3:
                 high_multiplier = st.number_input("倍数", min_value=-0.5, max_value=1.5, value=default_high_m, step=0.1, key="high_m_val", help="负数表示止盈卖出比例，正数表示定投倍数")
             
@@ -752,7 +346,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**低估**")
             with col2:
-                low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=default_low, step=1.0, key="low_val", help="价格低于均线该比例时增加定投")
+                low_threshold = st.number_input("偏离<=", min_value=-50.0, max_value=0.0, value=default_low, step=1.0, key="low_val", help="价格低于均线该比例时增加定投")
             with col3:
                 low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=default_low_m, step=0.1, key="low_m_val", help="低估时的定投倍数")
             
@@ -761,7 +355,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度低估**")
             with col2:
-                extreme_low_threshold = st.number_input("偏离≤", min_value=-50.0, max_value=0.0, value=default_extreme_low, step=1.0, key="extreme_low_val", help="价格低于均线该比例时加倍定投")
+                extreme_low_threshold = st.number_input("偏离<=", min_value=-50.0, max_value=0.0, value=default_extreme_low, step=1.0, key="extreme_low_val", help="价格低于均线该比例时加倍定投")
             with col3:
                 extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=default_extreme_low_m, step=0.5, key="extreme_low_m_val", help="极度低估时的定投倍数")
             
@@ -781,14 +375,14 @@ def _render_strategy_config_ui(date_range):
             config_params['trend_period'] = trend_period
             
             st.markdown("**阈值与倍数设置**")
-            st.markdown("*涨跌幅 = (当前价格 - N天前价格) / N天前价格 × 100%*")
+            st.markdown("*涨跌幅 = (当前价格 - N天前价格) / N天前价格 x 100%*")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                trend_extreme_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_EXTREME_HIGH_THRESHOLD, step=1.0, key="trend_extreme_high", help="涨幅超过该值时触发")
+                trend_extreme_high_threshold = st.number_input("涨幅>=", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_EXTREME_HIGH_THRESHOLD, step=1.0, key="trend_extreme_high", help="涨幅超过该值时触发")
             with col3:
                 extreme_high_multiplier = st.number_input("倍数", min_value=-1.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="trend_extreme_high_m", help="负数表示止盈卖出比例，0表示暂停定投")
             
@@ -797,7 +391,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**高估**")
             with col2:
-                trend_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_HIGH_THRESHOLD, step=1.0, key="trend_high", help="涨幅超过该值时减少定投")
+                trend_high_threshold = st.number_input("涨幅>=", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_HIGH_THRESHOLD, step=1.0, key="trend_high", help="涨幅超过该值时减少定投")
             with col3:
                 high_multiplier = st.number_input("倍数", min_value=-0.5, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="trend_high_m", help="负数表示止盈卖出比例，正数表示定投倍数")
             
@@ -815,7 +409,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**低估**")
             with col2:
-                trend_low_threshold = st.number_input("跌幅≤", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_LOW_THRESHOLD, step=1.0, key="trend_low", help="跌幅超过该值时增加定投")
+                trend_low_threshold = st.number_input("跌幅<=", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_LOW_THRESHOLD, step=1.0, key="trend_low", help="跌幅超过该值时增加定投")
             with col3:
                 low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="trend_low_m", help="低估时的定投倍数")
             
@@ -824,7 +418,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度低估**")
             with col2:
-                trend_extreme_low_threshold = st.number_input("跌幅≤", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_EXTREME_LOW_THRESHOLD, step=1.0, key="trend_extreme_low", help="跌幅超过该值时加倍定投")
+                trend_extreme_low_threshold = st.number_input("跌幅<=", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_EXTREME_LOW_THRESHOLD, step=1.0, key="trend_extreme_low", help="跌幅超过该值时加倍定投")
             with col3:
                 extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="trend_extreme_low_m", help="极度低估时的定投倍数")
             
@@ -856,7 +450,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                extreme_high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_EXTREME_HIGH_PERCENTILE, step=5.0, key="val_extreme_high", help="估值高于该分位时触发")
+                extreme_high_percentile = st.number_input("分位>=", min_value=50.0, max_value=100.0, value=DEFAULT_EXTREME_HIGH_PERCENTILE, step=5.0, key="val_extreme_high", help="估值高于该分位时触发")
             with col3:
                 extreme_high_multiplier = st.number_input("倍数", min_value=-1.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="val_extreme_high_m", help="负数表示止盈卖出比例，0表示暂停定投")
             
@@ -865,7 +459,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**高估**")
             with col2:
-                high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_HIGH_PERCENTILE, step=5.0, key="val_high", help="估值高于该分位时减少定投")
+                high_percentile = st.number_input("分位>=", min_value=50.0, max_value=100.0, value=DEFAULT_HIGH_PERCENTILE, step=5.0, key="val_high", help="估值高于该分位时减少定投")
             with col3:
                 high_multiplier = st.number_input("倍数", min_value=-0.5, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="val_high_m", help="负数表示止盈卖出比例，正数表示定投倍数")
             
@@ -883,7 +477,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**低估**")
             with col2:
-                low_percentile = st.number_input("分位≤", min_value=0.0, max_value=50.0, value=DEFAULT_LOW_PERCENTILE, step=5.0, key="val_low", help="估值低于该分位时增加定投")
+                low_percentile = st.number_input("分位<=", min_value=0.0, max_value=50.0, value=DEFAULT_LOW_PERCENTILE, step=5.0, key="val_low", help="估值低于该分位时增加定投")
             with col3:
                 low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="val_low_m", help="低估时的定投倍数")
             
@@ -892,7 +486,7 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度低估**")
             with col2:
-                extreme_low_percentile = st.number_input("分位≤", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_LOW_PERCENTILE, step=5.0, key="val_extreme_low", help="估值低于该分位时加倍定投")
+                extreme_low_percentile = st.number_input("分位<=", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_LOW_PERCENTILE, step=5.0, key="val_extreme_low", help="估值低于该分位时加倍定投")
             with col3:
                 extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="val_extreme_low_m", help="极度低估时的定投倍数")
             
@@ -944,7 +538,481 @@ def _render_strategy_config_ui(date_range):
     return SmartStrategyConfig(**config_params)
 
 
-def _render_comparison_ui(df, date_range):
+def render_sidebar() -> Dict[str, Any]:
+    with st.sidebar:
+        st.header("参数设置")
+        
+        data_source_result = _render_data_source_section()
+        data_source = data_source_result['data_source']
+        uploaded_file = data_source_result['uploaded_file']
+        
+        params = {
+            'uploaded_file': uploaded_file,
+            'data_source': data_source,
+            'df': None,
+            'date_range': None,
+            'start_date': None,
+            'end_date': None,
+            'freq_type': None,
+            'freq_param': None,
+            'amount': DEFAULT_AMOUNT,
+            'realistic_params': None,
+            'run_backtest': False,
+            'mode': 'single',
+            'analysis_start_date': None,
+            'analysis_end_date': None,
+            'investment_duration': DEFAULT_DURATION,
+            'sampling': DEFAULT_SAMPLING,
+            'strategy_mode': 'fixed',
+            'strategy_config': None
+        }
+        
+        df = None
+        error = None
+        
+        if data_source == "使用示例数据":
+            example_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "可用数据", "example_data.xlsx")
+            if os.path.exists(example_data_path):
+                df, error = load_excel_file(example_data_path)
+        elif uploaded_file is not None:
+            df, error = load_excel_file(uploaded_file)
+        
+        if df is not None and error is None:
+            date_range = get_date_range(df)
+            
+            valuation_info = ""
+            if date_range.get('has_valuation', False):
+                valuation_info = f"\n包含估值数据: {', '.join(date_range['valuation_columns'])}"
+            
+            st.success(f"数据加载成功！\n共 {date_range['record_count']} 条记录\n日期范围: {date_range['min_date']} ~ {date_range['max_date']}{valuation_info}")
+            
+            st.subheader("分析模式")
+            mode = st.radio("选择模式", ["单次回测", "概率分析"], horizontal=True)
+            mode_map = {"单次回测": "single", "概率分析": "probability"}
+            params['mode'] = mode_map.get(mode, "single")
+            
+            if params['mode'] == 'single':
+                params.update(_render_single_backtest_ui(df, date_range))
+            else:
+                params.update(_render_probability_analysis_ui(df, date_range))
+        else:
+            st.info("请上传 Excel 数据文件")
+        
+        return params
+
+
+def _display_summary_metrics(total_investment: float, final_asset: float, total_return: float, 
+                            avg_cost: float, dip_annualized: float, lump_annualized: float, 
+                            years: float, investment_count: int) -> None:
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("总投入本金", f"{total_investment:,.2f}元")
+    with col2:
+        st.metric("期末总资产", f"{final_asset:,.2f}元")
+    with col3:
+        st.metric("累计收益率", f"{total_return:.2f}%")
+    with col4:
+        st.metric("平均持仓成本", f"{avg_cost:,.2f}元")
+    
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("定投年化收益率", f"{dip_annualized:.2f}%", help="基于定投区间总时间计算的年化收益率")
+    with col6:
+        st.metric("一次性投入年化收益率", f"{lump_annualized:.2f}%", help="假设在开始日期一次性投入的年化收益率")
+    with col7:
+        st.metric("定投时长", f"{years:.2f}年")
+    with col8:
+        st.metric("定投次数", f"{investment_count}次")
+
+
+def _display_risk_metrics(risk_metrics: Dict[str, Any]) -> None:
+    col_risk1, col_risk2, col_risk3, col_risk4 = st.columns(4)
+    with col_risk1:
+        st.metric("最大亏损", f"{risk_metrics['max_drawdown']:.2f}%", help="相对于投入本金的最大亏损百分比")
+    with col_risk2:
+        st.metric("最大回撤", f"{risk_metrics['max_pullback']:.2f}%", help="从历史最高点到后续最低点的最大跌幅")
+    with col_risk3:
+        st.metric("累计亏损时长", f"{risk_metrics['loss_days']}天", help="累计收益率为负的总天数")
+    with col_risk4:
+        st.metric("亏损时长占比", f"{risk_metrics['loss_ratio']:.1f}%", help="亏损天数占总交易日的比例")
+    
+    col_risk5, col_risk6 = st.columns(2)
+    with col_risk5:
+        if risk_metrics['recovery_days'] is not None:
+            st.metric("回本时间", f"{risk_metrics['recovery_days']}天", help="从开始投资到再也不亏损所用的时间")
+        else:
+            st.metric("回本时间", "未回本", help="整个投资期间未能回本")
+    with col_risk6:
+        if risk_metrics['recovery_date'] is not None:
+            st.metric("回本日期", f"{risk_metrics['recovery_date'].date()}")
+        else:
+            st.metric("回本日期", "未回本")
+
+
+def _display_comparison_metrics(ideal_final_asset: float, ideal_total_return: float, ideal_annualized: float,
+                               real_final_asset: float, real_total_return: float, real_annualized: float) -> None:
+    st.markdown("---")
+    st.subheader("理想收益 vs 实际收益")
+    col9, col10, col11, col12 = st.columns(4)
+    with col9:
+        st.metric("理想期末资产", f"{ideal_final_asset:,.2f}元")
+    with col10:
+        st.metric("理想累计收益率", f"{ideal_total_return:.2f}%")
+    with col11:
+        st.metric("理想年化收益率", f"{ideal_annualized:.2f}%")
+    with col12:
+        st.empty()
+    
+    col13, col14, col15, col16 = st.columns(4)
+    with col13:
+        st.metric("实际期末资产", f"{real_final_asset:,.2f}元", f"-{ideal_final_asset - real_final_asset:,.2f}")
+    with col14:
+        st.metric("实际累计收益率", f"{real_total_return:.2f}%", f"-{ideal_total_return - real_total_return:.2f}%")
+    with col15:
+        st.metric("实际年化收益率", f"{real_annualized:.2f}%", f"-{ideal_annualized - real_annualized:.2f}%")
+    with col16:
+        st.empty()
+
+
+def _display_fee_details(total_purchase_fee: float, total_management_fee: float, 
+                        redemption_fee: float, total_fees: float) -> None:
+    st.markdown("---")
+    st.subheader("费用明细")
+    col_fee1, col_fee2, col_fee3, col_fee4 = st.columns(4)
+    with col_fee1:
+        st.metric("累计申购费", f"{total_purchase_fee:,.2f}元")
+    with col_fee2:
+        st.metric("累计管理费", f"{total_management_fee:,.2f}元", help="含管理费和托管费")
+    with col_fee3:
+        st.metric("赎回费用", f"{redemption_fee:,.2f}元")
+    with col_fee4:
+        st.metric("总费用", f"{total_fees:,.2f}元")
+
+
+def _display_parameters_summary(start_date, end_date, freq_type: str, freq_param, amount: float, 
+                               investment_dates, real_shares: float, last_price: float, first_price: float, 
+                               realistic_params: Optional[Dict[str, Any]] = None) -> None:
+    st.subheader("回测参数汇总")
+    st.write(f"- 定投区间: {start_date} ~ {end_date}")
+    st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
+    st.write(f"- 每次定投金额: {amount:,.2f}元")
+    st.write(f"- 定投次数: {len(investment_dates)} 次")
+    st.write(f"- 累计份额: {real_shares:,.4f} 份")
+    st.write(f"- 期末收盘价: {last_price:,.2f}元")
+    st.write(f"- 期初收盘价: {first_price:,.2f}元")
+    
+    if realistic_params:
+        st.write("---")
+        st.write("**基金现实因素参数:**")
+        st.write(f"- 管理费率: {realistic_params['management_fee']*100:.2f}%")
+        st.write(f"- 托管费率: {realistic_params['custody_fee']*100:.2f}%")
+        st.write(f"- 申购费率: {realistic_params['purchase_fee']*100:.2f}%")
+        st.write(f"- 赎回费率: {realistic_params['redemption_fee']*100:.2f}%")
+        st.write(f"- 现金比例: {realistic_params['cash_ratio']*100:.1f}%")
+        st.write(f"- 跟踪误差: {realistic_params['tracking_error']*100:.2f}% ({realistic_params['tracking_error_mode']})")
+
+
+def _display_investment_records(results_df, realistic_params: Optional[Dict[str, Any]] = None) -> None:
+    st.subheader("定投记录明细")
+    display_df = results_df.copy()
+    display_df['日期'] = display_df['日期'].astype(str)
+    display_df['收盘价'] = display_df['收盘价'].round(2)
+    display_df['买入份额'] = display_df['买入份额'].round(4)
+    display_df['累计份额'] = display_df['累计份额'].round(4)
+    display_df['投入金额'] = display_df['投入金额'].apply(lambda x: f"{x:,.2f}元")
+    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"{x:,.2f}元")
+    
+    if realistic_params:
+        display_df['申购费用'] = display_df['申购费用'].apply(lambda x: f"{x:,.2f}元")
+        st.dataframe(
+            display_df[['日期', '收盘价', '投入金额', '申购费用', '买入份额', '累计份额', '累计投入']],
+            use_container_width=True,
+            height=300
+        )
+    else:
+        st.dataframe(
+            display_df[['日期', '收盘价', '投入金额', '买入份额', '累计份额', '累计投入']],
+            use_container_width=True,
+            height=300
+        )
+
+
+def _display_single_backtest_results(start_date, end_date, freq_type: str, freq_param, amount: float, 
+                                     investment_dates, results_df, daily_assets_df, total_shares_ideal: float, 
+                                     total_investment: float, total_purchase_fee: float, realistic_params: Optional[Dict[str, Any]], 
+                                     risk_metrics: Dict[str, Any], lump_total_return: float, lump_annualized: float) -> None:
+    st.header(f"回测结果（{start_date} ~ {end_date}）")
+    
+    last_row = daily_assets_df.iloc[-1]
+    last_price = last_row['收盘价']
+    first_price = daily_assets_df.iloc[0]['收盘价']
+    
+    ideal_final_asset = last_row['理想持仓市值']
+    ideal_total_return = (ideal_final_asset - total_investment) / total_investment * 100
+    ideal_avg_cost = total_investment / total_shares_ideal if total_shares_ideal > 0 else 0
+    
+    days = (end_date - start_date).days
+    years = days / 365.0 if days > 0 else 0
+    ideal_dip_annualized = ((1 + ideal_total_return / 100) ** (1 / years) - 1) * 100 if years > 0 else 0
+    
+    if realistic_params:
+        real_final_asset = last_row['实际持仓市值']
+        real_shares = last_row['实际持仓份额']
+        total_management_fee = last_row['累计管理费']
+        
+        redemption_fee = real_final_asset * realistic_params.get('redemption_fee', 0)
+        final_asset_after_redemption = real_final_asset - redemption_fee
+        
+        real_total_return = (final_asset_after_redemption - total_investment) / total_investment * 100
+        real_avg_cost = total_investment / real_shares if real_shares > 0 else 0
+        
+        total_fees = total_purchase_fee + total_management_fee + redemption_fee
+        
+        real_dip_annualized = ((1 + real_total_return / 100) ** (1 / years) - 1) * 100 if years > 0 else 0
+        
+        _display_summary_metrics(
+            total_investment, final_asset_after_redemption, real_total_return, real_avg_cost,
+            real_dip_annualized, lump_annualized, years, len(investment_dates)
+        )
+        
+        st.markdown("---")
+        st.subheader("投资风险")
+        _display_risk_metrics(risk_metrics)
+        
+        _display_comparison_metrics(
+            ideal_final_asset, ideal_total_return, ideal_dip_annualized,
+            final_asset_after_redemption, real_total_return, real_dip_annualized
+        )
+        
+        _display_fee_details(total_purchase_fee, total_management_fee, redemption_fee, total_fees)
+    else:
+        real_shares = total_shares_ideal
+        
+        _display_summary_metrics(
+            total_investment, ideal_final_asset, ideal_total_return, ideal_avg_cost,
+            ideal_dip_annualized, lump_annualized, years, len(investment_dates)
+        )
+        
+        st.markdown("---")
+        st.subheader("投资风险")
+        _display_risk_metrics(risk_metrics)
+    
+    st.markdown("---")
+    
+    st.subheader("资产变动曲线")
+    fig1 = create_asset_chart(daily_assets_df, realistic_params)
+    st.plotly_chart(fig1, use_container_width=True)
+    
+    st.markdown("---")
+    
+    st.subheader("指数收盘价与持仓均价")
+    fig2 = create_price_chart(daily_assets_df, realistic_params)
+    st.plotly_chart(fig2, use_container_width=True)
+    
+    st.markdown("---")
+    
+    st.subheader("累计收益率曲线")
+    fig3 = create_return_chart(daily_assets_df, realistic_params, risk_metrics['recovery_date'])
+    st.plotly_chart(fig3, use_container_width=True)
+    
+    st.markdown("---")
+    
+    col_left, col_right = st.columns([1, 1])
+    
+    with col_left:
+        _display_parameters_summary(
+            start_date, end_date, freq_type, freq_param, amount,
+            investment_dates, real_shares, last_price, first_price, realistic_params
+        )
+    
+    with col_right:
+        _display_investment_records(results_df, realistic_params)
+
+
+def display_summary_metrics(total_investment: float, final_asset: float, total_return: float, avg_cost: float, 
+                           dip_annualized: float, lump_annualized: float, years: float, investment_count: int) -> None:
+    _display_summary_metrics(total_investment, final_asset, total_return, avg_cost, 
+                            dip_annualized, lump_annualized, years, investment_count)
+
+
+def display_risk_metrics(risk_metrics: Dict[str, Any]) -> None:
+    _display_risk_metrics(risk_metrics)
+
+
+def display_comparison_metrics(ideal_final_asset: float, ideal_total_return: float, ideal_annualized: float,
+                               real_final_asset: float, real_total_return: float, real_annualized: float) -> None:
+    _display_comparison_metrics(ideal_final_asset, ideal_total_return, ideal_annualized,
+                               real_final_asset, real_total_return, real_annualized)
+
+
+def display_fee_details(total_purchase_fee: float, total_management_fee: float, 
+                        redemption_fee: float, total_fees: float) -> None:
+    _display_fee_details(total_purchase_fee, total_management_fee, redemption_fee, total_fees)
+
+
+def display_parameters_summary(start_date, end_date, freq_type: str, freq_param, amount: float, 
+                               investment_dates, real_shares: float, last_price: float, first_price: float, 
+                               realistic_params: Optional[Dict[str, Any]] = None) -> None:
+    _display_parameters_summary(start_date, end_date, freq_type, freq_param, amount, 
+                               investment_dates, real_shares, last_price, first_price, realistic_params)
+
+
+def display_investment_records(results_df, realistic_params: Optional[Dict[str, Any]] = None) -> None:
+    _display_investment_records(results_df, realistic_params)
+
+
+def display_results(start_date, end_date, freq_type: str, freq_param, amount: float, investment_dates,
+                   results_df, daily_assets_df, total_shares_ideal: float, total_investment: float, 
+                   total_purchase_fee: float, realistic_params: Optional[Dict[str, Any]], risk_metrics: Dict[str, Any], 
+                   lump_total_return: float, lump_annualized: float) -> None:
+    _display_single_backtest_results(
+        start_date, end_date, freq_type, freq_param, amount, investment_dates,
+        results_df, daily_assets_df, total_shares_ideal, total_investment, 
+        total_purchase_fee, realistic_params, risk_metrics, lump_total_return, lump_annualized
+    )
+
+
+def _display_probability_results(stats: Dict[str, Any], results, investment_duration: float, 
+                                freq_type: str, freq_param, amount: float, sampling: str, 
+                                realistic_params: Optional[Dict[str, Any]] = None, 
+                                use_cash_flow: bool = False) -> None:
+    from .chart_renderer import create_return_distribution_chart, create_return_timeline_chart, create_cumulative_probability_chart, create_annualized_distribution_chart
+    
+    st.header(f"概率分析结果（定投时长: {investment_duration}年）")
+    
+    display_probability_summary(stats, investment_duration, realistic_params)
+    
+    st.markdown("---")
+    display_cumulative_probability(stats['cumulative_prob'])
+    
+    st.markdown("---")
+    display_annualized_cumulative_probability(stats['annualized_cumulative_prob'])
+    
+    st.markdown("---")
+    st.subheader("累计收益分布直方图")
+    fig_hist = create_return_distribution_chart(stats, realistic_params, use_cash_flow)
+    st.plotly_chart(fig_hist, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("年化收益分布直方图")
+    fig_ann_hist = create_annualized_distribution_chart(stats, realistic_params, use_cash_flow)
+    st.plotly_chart(fig_ann_hist, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("收益随起始日期变化")
+    fig_timeline = create_return_timeline_chart(results, realistic_params, use_cash_flow)
+    st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("累计概率曲线")
+    fig_cum = create_cumulative_probability_chart(stats, realistic_params, use_cash_flow)
+    st.plotly_chart(fig_cum, use_container_width=True)
+    
+    st.markdown("---")
+    
+    with st.expander("查看详细数据"):
+        display_probability_details(stats['results_df'], realistic_params, use_cash_flow)
+    
+    st.markdown("---")
+    st.subheader("分析参数")
+    st.write(f"- 定投时长: {investment_duration}年")
+    st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
+    st.write(f"- 每次定投金额: {amount:,.0f}元")
+    st.write(f"- 采样方式: {sampling}")
+    st.write(f"- 模拟次数: {stats['total_count']}次")
+
+
+def display_probability_summary(stats: Dict[str, Any], investment_duration: float, 
+                               realistic_params: Optional[Dict[str, Any]] = None) -> None:
+    st.subheader("核心概率指标")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        profit_color = "normal" if stats['profit_probability'] >= 50 else "inverse"
+        st.metric("盈利概率", f"{stats['profit_probability']:.1f}%", 
+                  help=f"在 {stats['total_count']} 次模拟中，有 {stats['profit_count']} 次盈利")
+    with col2:
+        st.metric("平均年化收益", f"{stats['avg_annualized']:.2f}%")
+    with col3:
+        st.metric("中位数年化收益", f"{stats['median_annualized']:.2f}%")
+    with col4:
+        st.metric("收益标准差", f"{stats['std_return']:.2f}%")
+    
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("最大累计收益", f"{stats['max_return']:.2f}%")
+    with col6:
+        st.metric("最小累计收益", f"{stats['min_return']:.2f}%")
+    with col7:
+        st.metric("平均定投次数", f"{stats['avg_investment_count']:.0f}次")
+    with col8:
+        st.metric("平均定投时长", f"{stats['avg_years']:.1f}年")
+
+
+def display_cumulative_probability(cumulative_prob: Dict[str, float]) -> None:
+    st.subheader("收益概率分布")
+    
+    cols = st.columns(len(cumulative_prob))
+    for i, (threshold, prob) in enumerate(cumulative_prob.items()):
+        with cols[i]:
+            st.metric(threshold, f"{prob:.1f}%")
+
+
+def display_annualized_cumulative_probability(annualized_cumulative_prob: Dict[str, float]) -> None:
+    st.subheader("年化收益概率分布")
+    
+    cols = st.columns(len(annualized_cumulative_prob))
+    for i, (threshold, prob) in enumerate(annualized_cumulative_prob.items()):
+        with cols[i]:
+            st.metric(threshold, f"{prob:.1f}%")
+
+
+def display_probability_details(results_df, realistic_params: Optional[Dict[str, Any]] = None, 
+                               use_cash_flow: bool = False) -> None:
+    st.subheader("详细数据")
+    
+    display_df = results_df.copy()
+    
+    if use_cash_flow and 'total_return_with_cash' in display_df.columns:
+        return_col = 'total_return_with_cash'
+        annualized_col = 'annualized_with_cash'
+        asset_col = 'total_asset_with_cash'
+        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_deposited', 
+                                  asset_col, return_col, annualized_col, 'cash_balance']]
+        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
+                              '累计收益率(%)', '年化收益率(%)', '现金余额']
+    elif realistic_params:
+        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
+                                  'real_final_asset', 'real_total_return', 'real_annualized', 'total_fees']]
+        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
+                              '累计收益率(%)', '年化收益率(%)', '总费用']
+    else:
+        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
+                                  'ideal_final_asset', 'ideal_total_return', 'ideal_annualized']]
+        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
+                              '累计收益率(%)', '年化收益率(%)']
+    
+    display_df['起始日期'] = display_df['起始日期'].astype(str)
+    display_df['结束日期'] = display_df['结束日期'].astype(str)
+    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"{x:,.0f}元")
+    display_df['期末资产'] = display_df['期末资产'].apply(lambda x: f"{x:,.0f}元")
+    if use_cash_flow and '现金余额' in display_df.columns:
+        display_df['现金余额'] = display_df['现金余额'].apply(lambda x: f"{x:,.0f}元")
+    display_df['累计收益率(%)'] = display_df['累计收益率(%)'].round(2)
+    display_df['年化收益率(%)'] = display_df['年化收益率(%)'].round(2)
+    
+    st.dataframe(display_df, use_container_width=True, height=400)
+
+
+def display_probability_analysis_results(stats: Dict[str, Any], results, investment_duration: float, 
+                                        freq_type: str, freq_param, amount: float, sampling: str, 
+                                        realistic_params: Optional[Dict[str, Any]] = None, 
+                                        use_cash_flow: bool = False) -> None:
+    _display_probability_results(stats, results, investment_duration, freq_type, freq_param, 
+                                amount, sampling, realistic_params, use_cash_flow)
+
+
+def _render_comparison_ui(df, date_range) -> Dict[str, Any]:
     st.subheader("定投区间")
     date_mode = st.radio("日期选择方式", ["手动选择日期", "按持有年限", "随机持有年限"], horizontal=True, index=2, key="comp_date_mode")
     
@@ -1024,8 +1092,9 @@ def _render_comparison_ui(df, date_range):
     }
 
 
-def display_comparison_results(comparison_data, start_date, end_date, freq_type, freq_param, 
-                               base_amount, strategy_config, realistic_params, use_cash_flow=True):
+def display_comparison_results(comparison_data: Dict[str, Any], start_date, end_date, freq_type: str, freq_param, 
+                               base_amount: float, strategy_config, realistic_params: Optional[Dict[str, Any]], 
+                               use_cash_flow: bool = True) -> None:
     from .chart_renderer import create_comparison_chart, create_strategy_signal_chart, create_amount_distribution_chart
     from .risk_analyzer import analyze_risk_metrics
     
@@ -1059,33 +1128,33 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("固定定投累计存入", f"¥{fixed_total_deposited:,.2f}")
+        st.metric("固定定投累计存入", f"{fixed_total_deposited:,.2f}元")
     with col2:
-        st.metric("智能定投累计存入", f"¥{smart_total_deposited:,.2f}")
+        st.metric("智能定投累计存入", f"{smart_total_deposited:,.2f}元")
     with col3:
         if use_cash_flow:
-            st.metric("存入金额一致", "✓", help="启用现金流账户后，两种策略存入金额相同")
+            st.metric("存入金额一致", "是", help="启用现金流账户后，两种策略存入金额相同")
         else:
             diff_investment = smart_total_investment - fixed_total_investment
-            st.metric("投入差异", f"¥{diff_investment:,.2f}", 
+            st.metric("投入差异", f"{diff_investment:,.2f}元", 
                       f"{'多投入' if diff_investment > 0 else '少投入'} {abs(diff_investment/fixed_total_investment*100):.1f}%")
     
     col4, col5, col6 = st.columns(3)
     with col4:
-        st.metric("固定定投期末资产", f"¥{fixed_final_asset:,.2f}")
+        st.metric("固定定投期末资产", f"{fixed_final_asset:,.2f}元")
     with col5:
-        st.metric("智能定投期末资产", f"¥{smart_final_asset:,.2f}")
+        st.metric("智能定投期末资产", f"{smart_final_asset:,.2f}元")
     with col6:
         diff_asset = smart_final_asset - fixed_final_asset
-        st.metric("资产差异", f"¥{diff_asset:,.2f}",
+        st.metric("资产差异", f"{diff_asset:,.2f}元",
                   f"{'+' if diff_asset > 0 else ''}{diff_asset/fixed_final_asset*100:.2f}%")
     
     if use_cash_flow and smart_cash_balance > 0:
         col_cash1, col_cash2, col_cash3 = st.columns(3)
         with col_cash1:
-            st.metric("智能定投现金余额", f"¥{smart_cash_balance:,.2f}", help="未投入的现金")
+            st.metric("智能定投现金余额", f"{smart_cash_balance:,.2f}元", help="未投入的现金")
         with col_cash2:
-            st.metric("智能定投总资产", f"¥{smart_total_asset:,.2f}", help="持仓市值 + 现金余额")
+            st.metric("智能定投总资产", f"{smart_total_asset:,.2f}元", help="持仓市值 + 现金余额")
         with col_cash3:
             cash_utilization = (smart_total_investment / smart_total_deposited * 100) if smart_total_deposited > 0 else 0
             st.metric("现金利用率", f"{cash_utilization:.1f}%", help="实际投入/累计存入")
@@ -1142,7 +1211,7 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
     st.markdown("---")
     st.subheader("策略参数")
     st.write(f"- 策略类型: {strategy_config.strategy_type}")
-    st.write(f"- 基础定投金额: ¥{base_amount:,.2f}")
+    st.write(f"- 基础定投金额: {base_amount:,.2f}元")
     if use_cash_flow:
         st.write(f"- 现金流账户: 已启用")
     if hasattr(strategy_config, 'ma_period'):
@@ -1155,14 +1224,14 @@ def display_comparison_results(comparison_data, start_date, end_date, freq_type,
         display_smart_investment_records(smart_results)
 
 
-def display_smart_investment_records(results_df):
+def display_smart_investment_records(results_df) -> None:
     display_df = results_df.copy()
     display_df['日期'] = display_df['日期'].astype(str)
     display_df['收盘价'] = display_df['收盘价'].round(2)
     display_df['买入份额'] = display_df['买入份额'].round(4)
     display_df['累计份额'] = display_df['累计份额'].round(4)
-    display_df['投入金额'] = display_df['投入金额'].apply(lambda x: f"¥{x:,.2f}")
-    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"¥{x:,.2f}")
+    display_df['投入金额'] = display_df['投入金额'].apply(lambda x: f"{x:,.2f}元")
+    display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"{x:,.2f}元")
     
     st.dataframe(
         display_df[['日期', '收盘价', '信号', '倍数', '投入金额', '买入份额', '累计份额', '累计投入', '原因']],
@@ -1171,8 +1240,10 @@ def display_smart_investment_records(results_df):
     )
 
 
-def display_comparison_probability_results(comparison_stats, investment_duration, freq_type, freq_param, 
-                                            base_amount, sampling, strategy_config, realistic_params=None, use_cash_flow=True):
+def display_comparison_probability_results(comparison_stats: Dict[str, Any], investment_duration: float, 
+                                          freq_type: str, freq_param, base_amount: float, sampling: str, 
+                                          strategy_config, realistic_params: Optional[Dict[str, Any]] = None, 
+                                          use_cash_flow: bool = True) -> None:
     from .chart_renderer import create_comparison_probability_chart, create_comparison_timeline_chart
     
     st.header(f"策略对比概率分析结果（定投时长: {investment_duration}年）")
@@ -1235,21 +1306,21 @@ def display_comparison_probability_results(comparison_stats, investment_duration
     
     col16, col17, col18 = st.columns(3)
     with col16:
-        st.metric("固定定投平均存入", f"¥{comparison_stats['fixed_avg_investment']:,.0f}")
+        st.metric("固定定投平均存入", f"{comparison_stats['fixed_avg_investment']:,.0f}元")
     with col17:
-        st.metric("智能定投平均存入", f"¥{smart_avg_deposited:,.0f}")
+        st.metric("智能定投平均存入", f"{smart_avg_deposited:,.0f}元")
     with col18:
         if use_cash_flow:
-            st.metric("存入金额一致", "✓", help="启用现金流账户后，两种策略存入金额相同")
+            st.metric("存入金额一致", "是", help="启用现金流账户后，两种策略存入金额相同")
         else:
             diff = comparison_stats['smart_avg_investment'] - comparison_stats['fixed_avg_investment']
             pct = diff / comparison_stats['fixed_avg_investment'] * 100 if comparison_stats['fixed_avg_investment'] > 0 else 0
-            st.metric("投入差异", f"¥{diff:,.0f}", f"{pct:+.1f}%")
+            st.metric("投入差异", f"{diff:,.0f}元", f"{pct:+.1f}%")
     
     if use_cash_flow and smart_avg_cash_balance > 0:
         col_cash1, col_cash2 = st.columns(2)
         with col_cash1:
-            st.metric("智能定投平均现金余额", f"¥{smart_avg_cash_balance:,.0f}", help="期末未投入的现金")
+            st.metric("智能定投平均现金余额", f"{smart_avg_cash_balance:,.0f}元", help="期末未投入的现金")
         with col_cash2:
             cash_utilization = ((comparison_stats['smart_avg_investment'] / smart_avg_deposited) * 100) if smart_avg_deposited > 0 else 0
             st.metric("平均现金利用率", f"{cash_utilization:.1f}%", help="实际投入/累计存入")
@@ -1268,7 +1339,7 @@ def display_comparison_probability_results(comparison_stats, investment_duration
     st.subheader("分析参数")
     st.write(f"- 定投时长: {investment_duration}年")
     st.write(f"- 定投频率: {freq_type}" + (f" ({freq_param})" if freq_param else ""))
-    st.write(f"- 基础定投金额: ¥{base_amount:,.0f}")
+    st.write(f"- 基础定投金额: {base_amount:,.0f}元")
     st.write(f"- 采样方式: {sampling}")
     st.write(f"- 模拟次数: {comparison_stats['total_count']}次")
     st.write(f"- 策略类型: {strategy_config.strategy_type}")
@@ -1293,7 +1364,7 @@ def display_comparison_probability_results(comparison_stats, investment_duration
                                'ideal_total_return', 'ideal_annualized']
                 fixed_df['累计收益率(%)'] = fixed_df['ideal_total_return'].round(2)
                 fixed_df['年化收益率(%)'] = fixed_df['ideal_annualized'].round(2)
-            fixed_df['累计投入'] = fixed_df['total_investment'].apply(lambda x: f"¥{x:,.0f}")
+            fixed_df['累计投入'] = fixed_df['total_investment'].apply(lambda x: f"{x:,.0f}元")
             st.dataframe(fixed_df[['起始日期', '结束日期', 'investment_count', '累计投入', '累计收益率(%)', '年化收益率(%)']], 
                         use_container_width=True, height=300)
         
@@ -1311,6 +1382,6 @@ def display_comparison_probability_results(comparison_stats, investment_duration
             else:
                 smart_df['累计收益率(%)'] = smart_df['ideal_total_return'].round(2)
                 smart_df['年化收益率(%)'] = smart_df['ideal_annualized'].round(2)
-            smart_df['累计投入'] = smart_df['total_investment'].apply(lambda x: f"¥{x:,.0f}")
+            smart_df['累计投入'] = smart_df['total_investment'].apply(lambda x: f"{x:,.0f}元")
             st.dataframe(smart_df[['起始日期', '结束日期', 'investment_count', '累计投入', '累计收益率(%)', '年化收益率(%)']], 
                         use_container_width=True, height=300)

@@ -238,24 +238,28 @@ def run_probability_analysis(df, analysis_start_date, analysis_end_date, investm
     return results, elapsed_time
 
 
-def calculate_probability_statistics(results, realistic_params=None):
+def calculate_probability_statistics(results, realistic_params=None, use_cash_flow=False):
     if not results:
         return None
     
     results_hash = _results_to_hashable(results)
     params_hash = _hash_params(realistic_params)
     
-    return _calculate_probability_statistics_cached(results_hash, results, params_hash, realistic_params)
+    return _calculate_probability_statistics_cached(results_hash, results, params_hash, realistic_params, use_cash_flow)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _calculate_probability_statistics_cached(results_hash, results, params_hash, realistic_params=None):
+def _calculate_probability_statistics_cached(results_hash, results, params_hash, realistic_params=None, use_cash_flow=False):
     if not results:
         return None
     
     df = pd.DataFrame(results)
     
-    if realistic_params:
+    if use_cash_flow and 'total_return_with_cash' in df.columns:
+        return_col = 'total_return_with_cash'
+        annualized_col = 'annualized_with_cash'
+        asset_col = 'total_asset_with_cash'
+    elif realistic_params:
         return_col = 'real_total_return'
         annualized_col = 'real_annualized'
         asset_col = 'real_final_asset'
@@ -352,7 +356,7 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
     if len(investment_dates) == 0:
         return None
     
-    results_df, total_shares_ideal, total_investment, total_purchase_fee, total_deposited, cash_balance = run_smart_backtest_calculation(
+    results_df, total_shares_ideal, total_investment, total_purchase_fee, total_deposited, cash_balance, total_from_sale, total_redemption_fee = run_smart_backtest_calculation(
         df, investment_dates, base_amount, strategy_config, realistic_params, use_cash_flow
     )
     
@@ -439,6 +443,7 @@ def run_single_smart_backtest(df, start_date, investment_duration_years, freq_ty
         'total_investment': total_investment,
         'total_deposited': total_deposited,
         'cash_balance': cash_balance,
+        'total_from_sale': total_from_sale,
         'ideal_final_asset': ideal_final_asset,
         'ideal_total_return': ideal_total_return,
         'ideal_annualized': ideal_annualized,

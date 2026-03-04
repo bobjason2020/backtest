@@ -207,10 +207,16 @@ def create_return_chart(daily_assets_df, realistic_params=None, recovery_date=No
     return fig
 
 
-def create_return_distribution_chart(stats, realistic_params=None):
+def create_return_distribution_chart(stats, realistic_params=None, use_cash_flow=False):
     fig = go.Figure()
     
-    return_col = 'real_total_return' if realistic_params else 'ideal_total_return'
+    if use_cash_flow and 'total_return_with_cash' in stats['results_df'].columns:
+        return_col = 'total_return_with_cash'
+    elif realistic_params:
+        return_col = 'real_total_return'
+    else:
+        return_col = 'ideal_total_return'
+    
     df = stats['results_df']
     
     returns = df[return_col].values
@@ -246,13 +252,19 @@ def create_return_distribution_chart(stats, realistic_params=None):
     return fig
 
 
-def create_return_timeline_chart(results, realistic_params=None):
+def create_return_timeline_chart(results, realistic_params=None, use_cash_flow=False):
     fig = go.Figure()
     
-    return_col = 'real_total_return' if realistic_params else 'ideal_total_return'
-    annualized_col = 'real_annualized' if realistic_params else 'ideal_annualized'
-    
     df = pd.DataFrame(results)
+    
+    if use_cash_flow and 'total_return_with_cash' in df.columns:
+        return_col = 'total_return_with_cash'
+    elif realistic_params:
+        return_col = 'real_total_return'
+    else:
+        return_col = 'ideal_total_return'
+    
+    annualized_col = 'real_annualized' if realistic_params else 'ideal_annualized'
     
     colors = ['green' if r > 0 else 'red' for r in df[return_col]]
     
@@ -279,11 +291,18 @@ def create_return_timeline_chart(results, realistic_params=None):
     return fig
 
 
-def create_cumulative_probability_chart(stats, realistic_params=None):
+def create_cumulative_probability_chart(stats, realistic_params=None, use_cash_flow=False):
     fig = go.Figure()
     
     df = stats['results_df']
-    return_col = 'real_total_return' if realistic_params else 'ideal_total_return'
+    
+    if use_cash_flow and 'total_return_with_cash' in df.columns:
+        return_col = 'total_return_with_cash'
+    elif realistic_params:
+        return_col = 'real_total_return'
+    else:
+        return_col = 'ideal_total_return'
+    
     returns = sorted(df[return_col].values)
     total = len(returns)
     
@@ -318,10 +337,16 @@ def create_cumulative_probability_chart(stats, realistic_params=None):
     return fig
 
 
-def create_annualized_distribution_chart(stats, realistic_params=None):
+def create_annualized_distribution_chart(stats, realistic_params=None, use_cash_flow=False):
     fig = go.Figure()
     
-    annualized_col = 'real_annualized' if realistic_params else 'ideal_annualized'
+    if use_cash_flow and 'annualized_with_cash' in stats['results_df'].columns:
+        annualized_col = 'annualized_with_cash'
+    elif realistic_params:
+        annualized_col = 'real_annualized'
+    else:
+        annualized_col = 'ideal_annualized'
+    
     df = stats['results_df']
     
     annualized_returns = df[annualized_col].values
@@ -378,41 +403,43 @@ def create_comparison_chart(fixed_df, smart_df, realistic_params=None):
         hovertemplate='日期: %{x}<br>智能投入: ¥%{y:,.2f}<extra></extra>'
     ))
     
+    smart_asset_col = '总资产' if '总资产' in smart_df.columns else ('实际持仓市值' if realistic_params else '理想持仓市值')
+    
     if realistic_params:
         fig.add_trace(go.Scatter(
             x=fixed_df['日期'],
             y=fixed_df['实际持仓市值'],
             mode='lines',
-            name='固定定投-持仓市值',
+            name='固定定投-总资产',
             line=dict(color='green', width=2, dash='dash'),
-            hovertemplate='日期: %{x}<br>固定市值: ¥%{y:,.2f}<extra></extra>'
+            hovertemplate='日期: %{x}<br>固定总资产: ¥%{y:,.2f}<extra></extra>'
         ))
         
         fig.add_trace(go.Scatter(
             x=smart_df['日期'],
-            y=smart_df['实际持仓市值'],
+            y=smart_df[smart_asset_col],
             mode='lines',
-            name='智能定投-持仓市值',
+            name='智能定投-总资产',
             line=dict(color='red', width=2),
-            hovertemplate='日期: %{x}<br>智能市值: ¥%{y:,.2f}<extra></extra>'
+            hovertemplate='日期: %{x}<br>智能总资产: ¥%{y:,.2f}<extra></extra>'
         ))
     else:
         fig.add_trace(go.Scatter(
             x=fixed_df['日期'],
             y=fixed_df['理想持仓市值'],
             mode='lines',
-            name='固定定投-持仓市值',
+            name='固定定投-总资产',
             line=dict(color='green', width=2, dash='dash'),
-            hovertemplate='日期: %{x}<br>固定市值: ¥%{y:,.2f}<extra></extra>'
+            hovertemplate='日期: %{x}<br>固定总资产: ¥%{y:,.2f}<extra></extra>'
         ))
         
         fig.add_trace(go.Scatter(
             x=smart_df['日期'],
-            y=smart_df['理想持仓市值'],
+            y=smart_df[smart_asset_col],
             mode='lines',
-            name='智能定投-持仓市值',
+            name='智能定投-总资产',
             line=dict(color='red', width=2),
-            hovertemplate='日期: %{x}<br>智能市值: ¥%{y:,.2f}<extra></extra>'
+            hovertemplate='日期: %{x}<br>智能总资产: ¥%{y:,.2f}<extra></extra>'
         ))
     
     fig.update_layout(
@@ -496,7 +523,7 @@ def create_amount_distribution_chart(results_df, base_amount):
     return fig
 
 
-def create_comparison_probability_chart(comparison_stats, realistic_params=None):
+def create_comparison_probability_chart(comparison_stats, realistic_params=None, use_cash_flow=True):
     import numpy as np
     
     fig = go.Figure()
@@ -510,7 +537,11 @@ def create_comparison_probability_chart(comparison_stats, realistic_params=None)
     smart_df = comparison_stats['smart_results_df']
     
     fixed_returns = fixed_df[return_col].values
-    smart_returns = smart_df[return_col].values
+    
+    if use_cash_flow and 'total_return_with_cash' in smart_df.columns:
+        smart_returns = smart_df['total_return_with_cash'].values
+    else:
+        smart_returns = smart_df[return_col].values
     
     all_returns = np.concatenate([fixed_returns, smart_returns])
     min_return = np.floor(all_returns.min() / 5) * 5
@@ -567,7 +598,7 @@ def create_comparison_probability_chart(comparison_stats, realistic_params=None)
     return fig
 
 
-def create_comparison_timeline_chart(comparison_stats, realistic_params=None):
+def create_comparison_timeline_chart(comparison_stats, realistic_params=None, use_cash_flow=True):
     fig = go.Figure()
     
     fixed_df = comparison_stats['fixed_results_df'].sort_values('start_date').reset_index(drop=True)
@@ -588,9 +619,14 @@ def create_comparison_timeline_chart(comparison_stats, realistic_params=None):
         hovertemplate='日期: %{x}<br>固定定投收益: %{y:.2f}%<extra></extra>'
     ))
     
+    if use_cash_flow and 'total_return_with_cash' in smart_df.columns:
+        smart_return_col = 'total_return_with_cash'
+    else:
+        smart_return_col = return_col
+    
     fig.add_trace(go.Scatter(
         x=smart_df['start_date'],
-        y=smart_df[return_col],
+        y=smart_df[smart_return_col],
         mode='lines+markers',
         name='智能定投',
         line=dict(color='#e74c3c', width=1.5),

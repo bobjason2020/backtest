@@ -21,6 +21,7 @@ class CashFlowAccount:
     balance: float = 0.0
     total_deposited: float = 0.0
     total_withdrawn: float = 0.0
+    total_from_sale: float = 0.0
     records: List[Dict[str, Any]] = field(default_factory=list)
     
     def deposit(self, amount: float) -> float:
@@ -38,6 +39,13 @@ class CashFlowAccount:
         self.total_withdrawn += actual_amount
         return actual_amount
     
+    def receive_from_sale(self, amount: float) -> float:
+        if amount <= 0:
+            return self.balance
+        self.balance += amount
+        self.total_from_sale += amount
+        return self.balance
+    
     def get_available_amount(self, requested: float) -> float:
         if requested <= 0:
             return 0.0
@@ -49,7 +57,8 @@ class CashFlowAccount:
         return self.total_withdrawn / self.total_deposited
     
     def add_record(self, date, deposit: float = 0.0, withdraw: float = 0.0,
-                   signal: str = '', requested: float = 0.0, actual: float = 0.0):
+                   signal: str = '', requested: float = 0.0, actual: float = 0.0,
+                   from_sale: float = 0.0):
         record = {
             'date': date,
             'deposit': deposit,
@@ -57,7 +66,8 @@ class CashFlowAccount:
             'balance': self.balance,
             'signal': signal,
             'requested': requested,
-            'actual': actual
+            'actual': actual,
+            'from_sale': from_sale
         }
         self.records.append(record)
     
@@ -70,4 +80,5 @@ class CashFlowAccount:
         self.balance = 0.0
         self.total_deposited = 0.0
         self.total_withdrawn = 0.0
+        self.total_from_sale = 0.0
         self.records = []

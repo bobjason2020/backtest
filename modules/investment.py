@@ -253,10 +253,14 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
     total_investment = 0
     total_purchase_fee = 0
     total_deposited = 0
+    total_from_sale = 0
+    total_redemption_fee = 0
     
     purchase_fee_rate = 0
+    redemption_fee_rate = 0
     if realistic_params:
         purchase_fee_rate = realistic_params.get('purchase_fee', 0)
+        redemption_fee_rate = realistic_params.get('redemption_fee', 0)
     
     for inv_date in investment_dates:
         row = df[dates == inv_date]
@@ -264,46 +268,103 @@ def run_smart_backtest_calculation(df, investment_dates, base_amount, strategy_c
             close_price = row['收盘价'].values[0]
             
             signal = strategy.calculate_signal(df, inv_date)
-            requested_amount = base_amount * signal.multiplier
+            multiplier = signal.multiplier
             
             if use_cash_flow and cash_account:
                 cash_account.deposit(base_amount)
                 total_deposited += base_amount
-                
-                actual_amount_raw = cash_account.get_available_amount(requested_amount)
-                if actual_amount_raw > 0:
-                    cash_account.withdraw(actual_amount_raw)
+            
+            if multiplier < 0:
+                sell_ratio = min(abs(multiplier), 1.0)
+                if total_shares > 0 and close_price > 0:
+                    sell_shares = total_shares * sell_ratio
+                    sell_amount_raw = sell_shares * close_price
+                    
+                    redemption_fee = sell_amount_raw * redemption_fee_rate
+                    sell_amount_net = sell_amount_raw - redemption_fee
+                    
+                    total_shares -= sell_shares
+                    total_investment -= sell_amount_raw
+                    total_redemption_fee += redemption_fee
+                    
+                    if use_cash_flow and cash_account:
+                        cash_account.receive_from_sale(sell_amount_net)
+                        total_from_sale += sell_amount_net
+                    
+                    results.append({
+                        '日期': inv_date,
+                        '收盘价': close_price,
+                        '操作': '卖出',
+                        '信号': signal.signal,
+                        '倍数': multiplier,
+                        '卖出比例': sell_ratio,
+                        '卖出份额': sell_shares,
+                        '卖出金额': sell_amount_raw,
+                        '赎回费用': redemption_fee,
+                        '实际卖出金额': sell_amount_net,
+                        '剩余份额': total_shares,
+                        '累计投入': total_investment,
+                        '累计赎回费': total_redemption_fee,
+                        '原因': signal.reason
+                    })
+                else:
+                    results.append({
+                        '日期': inv_date,
+                        '收盘价': close_price,
+                        '操作': '跳过',
+                        '信号': signal.signal,
+                        '倍数': multiplier,
+                        '原因': '无持仓可卖出' if total_shares <= 0 else signal.reason
+                    })
             else:
-                actual_amount_raw = requested_amount
-            
-            actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
-            purchase_fee = actual_amount_raw * purchase_fee_rate
-            shares = actual_amount / close_price if close_price > 0 else 0
-            
-            total_shares += shares
-            total_investment += actual_amount_raw
-            total_purchase_fee += purchase_fee
-            
-            results.append({
-                '日期': inv_date,
-                '收盘价': close_price,
-                '信号': signal.signal,
-                '倍数': signal.multiplier,
-                '期望投入': requested_amount,
-                '投入金额': actual_amount_raw,
-                '申购费用': purchase_fee,
-                '实际买入金额': actual_amount,
-                '买入份额': shares,
-                '累计份额': total_shares,
-                '累计投入': total_investment,
-                '累计申购费': total_purchase_fee,
-                '原因': signal.reason
-            })
+                requested_amount = base_amount * multiplier
+                
+                if use_cash_flow and cash_account:
+                    actual_amount_raw = cash_account.get_available_amount(requested_amount)
+                    if actual_amount_raw > 0:
+                        cash_account.withdraw(actual_amount_raw)
+                else:
+                    actual_amount_raw = requested_amount
+                
+                if actual_amount_raw > 0:
+                    actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
+                    purchase_fee = actual_amount_raw * purchase_fee_rate
+                    shares = actual_amount / close_price if close_price > 0 else 0
+                    
+                    total_shares += shares
+                    total_investment += actual_amount_raw
+                    total_purchase_fee += purchase_fee
+                    
+                    results.append({
+                        '日期': inv_date,
+                        '收盘价': close_price,
+                        '操作': '买入',
+                        '信号': signal.signal,
+                        '倍数': multiplier,
+                        '期望投入': requested_amount,
+                        '投入金额': actual_amount_raw,
+                        '申购费用': purchase_fee,
+                        '实际买入金额': actual_amount,
+                        '买入份额': shares,
+                        '累计份额': total_shares,
+                        '累计投入': total_investment,
+                        '累计申购费': total_purchase_fee,
+                        '原因': signal.reason
+                    })
+                else:
+                    results.append({
+                        '日期': inv_date,
+                        '收盘价': close_price,
+                        '操作': '跳过',
+                        '信号': signal.signal,
+                        '倍数': multiplier,
+                        '原因': '现金余额不足' if multiplier > 0 else signal.reason
+                    })
     
     cash_balance = cash_account.balance if cash_account else 0
     total_deposited = total_deposited if use_cash_flow else total_investment
     
-    return pd.DataFrame(results), total_shares, total_investment, total_purchase_fee, total_deposited, cash_balance
+    return pd.DataFrame(results), total_shares, total_investment, total_purchase_fee, total_deposited, cash_balance, total_from_sale, total_redemption_fee
 
 
 def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_config, realistic_params=None, use_cash_flow=True):
@@ -318,6 +379,7 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
     cash_ratio = 0
     tracking_error = 0
     tracking_error_mode = "固定折扣"
+    redemption_fee_rate = 0
     
     if realistic_params:
         purchase_fee_rate = realistic_params.get('purchase_fee', 0)
@@ -326,37 +388,17 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
         cash_ratio = realistic_params.get('cash_ratio', 0)
         tracking_error = realistic_params.get('tracking_error', 0)
         tracking_error_mode = realistic_params.get('tracking_error_mode', "固定折扣")
+        redemption_fee_rate = realistic_params.get('redemption_fee', 0)
     
-    investment_by_date = {}
-    total_deposited = 0
-    
+    signals_by_date = {}
     for inv_date in investment_dates:
         row = df[dates == inv_date]
         if len(row) > 0:
-            close_price = row['收盘价'].values[0]
             signal = strategy.calculate_signal(df, inv_date)
-            requested_amount = base_amount * signal.multiplier
-            
-            if use_cash_flow and cash_account:
-                cash_account.deposit(base_amount)
-                total_deposited += base_amount
-                
-                actual_amount_raw = cash_account.get_available_amount(requested_amount)
-                if actual_amount_raw > 0:
-                    cash_account.withdraw(actual_amount_raw)
-            else:
-                actual_amount_raw = requested_amount
-            
-            actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
-            shares = actual_amount / close_price if close_price > 0 else 0
-            investment_by_date[inv_date] = {
-                'amount': actual_amount_raw,
-                'shares': shares,
-                'purchase_fee': actual_amount_raw * purchase_fee_rate,
+            signals_by_date[inv_date] = {
                 'signal': signal.signal,
                 'multiplier': signal.multiplier,
-                'requested': requested_amount,
-                'cash_balance': cash_account.balance if cash_account else 0
+                'reason': signal.reason
             }
     
     daily_records = []
@@ -365,8 +407,9 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
     running_shares_real = 0
     running_purchase_fee = 0
     running_management_fee = 0
+    running_redemption_fee = 0
     running_deposited = 0
-    running_cash_balance = 0
+    running_from_sale = 0
     
     np.random.seed(42)
     
@@ -374,14 +417,48 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
         current_date = dates.iloc[idx]
         close_price = df['收盘价'].iloc[idx]
         
-        if current_date in investment_by_date:
-            inv_data = investment_by_date[current_date]
-            running_investment += inv_data['amount']
-            running_shares_ideal += inv_data['shares']
-            running_shares_real += inv_data['shares']
-            running_purchase_fee += inv_data['purchase_fee']
-            running_deposited += base_amount if use_cash_flow else inv_data['amount']
-            running_cash_balance = inv_data.get('cash_balance', 0)
+        if current_date in signals_by_date:
+            sig_data = signals_by_date[current_date]
+            multiplier = sig_data['multiplier']
+            
+            if use_cash_flow and cash_account:
+                cash_account.deposit(base_amount)
+                running_deposited += base_amount
+            
+            if multiplier < 0:
+                sell_ratio = min(abs(multiplier), 1.0)
+                if running_shares_ideal > 0:
+                    sell_shares = running_shares_ideal * sell_ratio
+                    sell_amount_raw = sell_shares * close_price
+                    redemption_fee = sell_amount_raw * redemption_fee_rate
+                    sell_amount_net = sell_amount_raw - redemption_fee
+                    
+                    running_shares_ideal -= sell_shares
+                    running_shares_real -= sell_shares
+                    running_investment -= sell_amount_raw
+                    running_redemption_fee += redemption_fee
+                    
+                    if use_cash_flow and cash_account:
+                        cash_account.receive_from_sale(sell_amount_net)
+                        running_from_sale += sell_amount_net
+            else:
+                requested_amount = base_amount * multiplier
+                
+                if use_cash_flow and cash_account:
+                    actual_amount_raw = cash_account.get_available_amount(requested_amount)
+                    if actual_amount_raw > 0:
+                        cash_account.withdraw(actual_amount_raw)
+                else:
+                    actual_amount_raw = requested_amount
+                
+                if actual_amount_raw > 0:
+                    actual_amount = actual_amount_raw * (1 - purchase_fee_rate)
+                    shares = actual_amount / close_price if close_price > 0 else 0
+                    
+                    running_shares_ideal += shares
+                    running_shares_real += shares
+                    running_investment += actual_amount_raw
+                    running_purchase_fee += actual_amount_raw * purchase_fee_rate
         
         ideal_asset_value = running_shares_ideal * close_price
         ideal_avg_cost = running_investment / running_shares_ideal if running_shares_ideal > 0 else 0
@@ -403,14 +480,15 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
             real_avg_cost = ideal_avg_cost
             running_shares_real = running_shares_ideal
         
-        total_asset = ideal_asset_value + running_cash_balance if use_cash_flow else ideal_asset_value
+        cash_balance = cash_account.balance if cash_account else 0
+        total_asset = ideal_asset_value + cash_balance if use_cash_flow else ideal_asset_value
         
         daily_records.append({
             '日期': df['日期'].iloc[idx],
             '收盘价': close_price,
             '累计存入': running_deposited if use_cash_flow else running_investment,
             '累计投入': running_investment,
-            '现金余额': running_cash_balance,
+            '现金余额': cash_balance,
             '总资产': total_asset,
             '理想持仓份额': running_shares_ideal,
             '实际持仓份额': running_shares_real,
@@ -419,12 +497,14 @@ def calculate_smart_daily_assets(df, investment_dates, base_amount, strategy_con
             '理想持仓均价': ideal_avg_cost,
             '实际持仓均价': real_avg_cost,
             '累计申购费': running_purchase_fee,
-            '累计管理费': running_management_fee
+            '累计管理费': running_management_fee,
+            '累计赎回费': running_redemption_fee,
+            '累计卖出收入': running_from_sale
         })
     
-    cash_balance = cash_account.balance if cash_account else 0
+    final_cash_balance = cash_account.balance if cash_account else 0
     
-    return pd.DataFrame(daily_records), investment_by_date, total_deposited, cash_balance
+    return pd.DataFrame(daily_records), signals_by_date, running_deposited, final_cash_balance, running_from_sale
 
 
 def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, realistic_params=None, use_cash_flow=True):
@@ -436,11 +516,11 @@ def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, 
         df, investment_dates, base_amount, realistic_params
     )
     
-    smart_results_df, smart_shares, smart_investment, smart_fees, smart_deposited, smart_cash_balance = run_smart_backtest_calculation(
+    smart_results_df, smart_shares, smart_investment, smart_fees, smart_deposited, smart_cash_balance, smart_from_sale, smart_redemption_fees = run_smart_backtest_calculation(
         df, investment_dates, base_amount, strategy_config, realistic_params, use_cash_flow
     )
     
-    smart_daily_df, smart_investment_by_date, smart_total_deposited, smart_final_cash = calculate_smart_daily_assets(
+    smart_daily_df, smart_signals_by_date, smart_total_deposited, smart_final_cash, smart_total_from_sale = calculate_smart_daily_assets(
         df, investment_dates, base_amount, strategy_config, realistic_params, use_cash_flow
     )
     
@@ -459,8 +539,10 @@ def run_comparison_backtest(df, investment_dates, base_amount, strategy_config, 
             'total_shares': smart_shares,
             'total_investment': smart_investment,
             'total_fees': smart_fees,
-            'investment_by_date': smart_investment_by_date,
-            'total_deposited': smart_deposited,
-            'cash_balance': smart_cash_balance
+            'signals_by_date': smart_signals_by_date,
+            'total_deposited': smart_total_deposited,
+            'cash_balance': smart_final_cash,
+            'total_from_sale': smart_total_from_sale,
+            'total_redemption_fees': smart_redemption_fees
         }
     }

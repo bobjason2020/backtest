@@ -563,12 +563,20 @@ def display_annualized_cumulative_probability(annualized_cumulative_prob):
             st.metric(threshold, f"{prob:.1f}%")
 
 
-def display_probability_details(results_df, realistic_params=None):
+def display_probability_details(results_df, realistic_params=None, use_cash_flow=False):
     st.subheader("详细数据")
     
     display_df = results_df.copy()
     
-    if realistic_params:
+    if use_cash_flow and 'total_return_with_cash' in display_df.columns:
+        return_col = 'total_return_with_cash'
+        annualized_col = 'annualized_with_cash'
+        asset_col = 'total_asset_with_cash'
+        display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_deposited', 
+                                  asset_col, return_col, annualized_col, 'cash_balance']]
+        display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
+                              '累计收益率(%)', '年化收益率(%)', '现金余额']
+    elif realistic_params:
         display_df = display_df[['start_date', 'end_date', 'investment_count', 'total_investment', 
                                   'real_final_asset', 'real_total_return', 'real_annualized', 'total_fees']]
         display_df.columns = ['起始日期', '结束日期', '定投次数', '累计投入', '期末资产', 
@@ -583,6 +591,8 @@ def display_probability_details(results_df, realistic_params=None):
     display_df['结束日期'] = display_df['结束日期'].astype(str)
     display_df['累计投入'] = display_df['累计投入'].apply(lambda x: f"¥{x:,.0f}")
     display_df['期末资产'] = display_df['期末资产'].apply(lambda x: f"¥{x:,.0f}")
+    if use_cash_flow and '现金余额' in display_df.columns:
+        display_df['现金余额'] = display_df['现金余额'].apply(lambda x: f"¥{x:,.0f}")
     display_df['累计收益率(%)'] = display_df['累计收益率(%)'].round(2)
     display_df['年化收益率(%)'] = display_df['年化收益率(%)'].round(2)
     
@@ -590,7 +600,7 @@ def display_probability_details(results_df, realistic_params=None):
 
 
 def display_probability_analysis_results(stats, results, investment_duration, freq_type, freq_param, 
-                                         amount, sampling, realistic_params=None):
+                                         amount, sampling, realistic_params=None, use_cash_flow=False):
     from .chart_renderer import create_return_distribution_chart, create_return_timeline_chart, create_cumulative_probability_chart, create_annualized_distribution_chart
     
     st.header(f"概率分析结果（定投时长: {investment_duration}年）")
@@ -605,28 +615,28 @@ def display_probability_analysis_results(stats, results, investment_duration, fr
     
     st.markdown("---")
     st.subheader("累计收益分布直方图")
-    fig_hist = create_return_distribution_chart(stats, realistic_params)
+    fig_hist = create_return_distribution_chart(stats, realistic_params, use_cash_flow)
     st.plotly_chart(fig_hist, use_container_width=True)
     
     st.markdown("---")
     st.subheader("年化收益分布直方图")
-    fig_ann_hist = create_annualized_distribution_chart(stats, realistic_params)
+    fig_ann_hist = create_annualized_distribution_chart(stats, realistic_params, use_cash_flow)
     st.plotly_chart(fig_ann_hist, use_container_width=True)
     
     st.markdown("---")
     st.subheader("收益随起始日期变化")
-    fig_timeline = create_return_timeline_chart(results, realistic_params)
+    fig_timeline = create_return_timeline_chart(results, realistic_params, use_cash_flow)
     st.plotly_chart(fig_timeline, use_container_width=True)
     
     st.markdown("---")
     st.subheader("累计概率曲线")
-    fig_cum = create_cumulative_probability_chart(stats, realistic_params)
+    fig_cum = create_cumulative_probability_chart(stats, realistic_params, use_cash_flow)
     st.plotly_chart(fig_cum, use_container_width=True)
     
     st.markdown("---")
     
     with st.expander("查看详细数据"):
-        display_probability_details(stats['results_df'], realistic_params)
+        display_probability_details(stats['results_df'], realistic_params, use_cash_flow)
     
     st.markdown("---")
     st.subheader("分析参数")
@@ -715,9 +725,9 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_extreme_high, step=1.0, key="extreme_high_val", help="价格高于均线该比例时暂停定投")
+                extreme_high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_extreme_high, step=1.0, key="extreme_high_val", help="价格高于均线该比例时触发")
             with col3:
-                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=default_extreme_high_m, step=0.1, key="extreme_high_m_val", help="0表示暂停定投")
+                extreme_high_multiplier = st.number_input("倍数", min_value=-1.0, max_value=1.0, value=default_extreme_high_m, step=0.1, key="extreme_high_m_val", help="负数表示止盈卖出比例，0表示暂停定投")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -726,7 +736,7 @@ def _render_strategy_config_ui(date_range):
             with col2:
                 high_threshold = st.number_input("偏离≥", min_value=0.0, max_value=50.0, value=default_high, step=1.0, key="high_val", help="价格高于均线该比例时减少定投")
             with col3:
-                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=default_high_m, step=0.1, key="high_m_val", help="高估时的定投倍数")
+                high_multiplier = st.number_input("倍数", min_value=-0.5, max_value=1.5, value=default_high_m, step=0.1, key="high_m_val", help="负数表示止盈卖出比例，正数表示定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -778,9 +788,9 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                trend_extreme_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_EXTREME_HIGH_THRESHOLD, step=1.0, key="trend_extreme_high", help="涨幅超过该值时暂停定投")
+                trend_extreme_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_EXTREME_HIGH_THRESHOLD, step=1.0, key="trend_extreme_high", help="涨幅超过该值时触发")
             with col3:
-                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="trend_extreme_high_m", help="0表示暂停定投")
+                extreme_high_multiplier = st.number_input("倍数", min_value=-1.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="trend_extreme_high_m", help="负数表示止盈卖出比例，0表示暂停定投")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -789,7 +799,7 @@ def _render_strategy_config_ui(date_range):
             with col2:
                 trend_high_threshold = st.number_input("涨幅≥", min_value=0.0, max_value=100.0, value=DEFAULT_TREND_HIGH_THRESHOLD, step=1.0, key="trend_high", help="涨幅超过该值时减少定投")
             with col3:
-                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="trend_high_m", help="高估时的定投倍数")
+                high_multiplier = st.number_input("倍数", min_value=-0.5, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="trend_high_m", help="负数表示止盈卖出比例，正数表示定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -846,9 +856,9 @@ def _render_strategy_config_ui(date_range):
             with col1:
                 st.markdown("**极度高估**")
             with col2:
-                extreme_high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_EXTREME_HIGH_PERCENTILE, step=5.0, key="val_extreme_high", help="估值高于该分位时暂停定投")
+                extreme_high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_EXTREME_HIGH_PERCENTILE, step=5.0, key="val_extreme_high", help="估值高于该分位时触发")
             with col3:
-                extreme_high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="val_extreme_high_m", help="0表示暂停定投")
+                extreme_high_multiplier = st.number_input("倍数", min_value=-1.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="val_extreme_high_m", help="负数表示止盈卖出比例，0表示暂停定投")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -857,7 +867,7 @@ def _render_strategy_config_ui(date_range):
             with col2:
                 high_percentile = st.number_input("分位≥", min_value=50.0, max_value=100.0, value=DEFAULT_HIGH_PERCENTILE, step=5.0, key="val_high", help="估值高于该分位时减少定投")
             with col3:
-                high_multiplier = st.number_input("倍数", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="val_high_m", help="高估时的定投倍数")
+                high_multiplier = st.number_input("倍数", min_value=-0.5, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="val_high_m", help="负数表示止盈卖出比例，正数表示定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -915,9 +925,9 @@ def _render_strategy_config_ui(date_range):
             st.markdown("**金额调整倍数**")
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
             with col_m1:
-                extreme_high_multiplier = st.number_input("极度高估", min_value=0.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="combo_extreme_high_m")
+                extreme_high_multiplier = st.number_input("极度高估", min_value=-1.0, max_value=1.0, value=DEFAULT_EXTREME_HIGH_MULTIPLIER, step=0.1, key="combo_extreme_high_m", help="负数=止盈卖出")
             with col_m2:
-                high_multiplier = st.number_input("高估", min_value=0.0, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="combo_high_m")
+                high_multiplier = st.number_input("高估", min_value=-0.5, max_value=1.5, value=DEFAULT_HIGH_MULTIPLIER, step=0.1, key="combo_high_m", help="负数=止盈卖出")
             with col_m3:
                 normal_multiplier = st.number_input("正常", min_value=0.5, max_value=2.0, value=DEFAULT_NORMAL_MULTIPLIER, step=0.1, key="combo_normal_m")
             with col_m4:
@@ -1246,12 +1256,12 @@ def display_comparison_probability_results(comparison_stats, investment_duration
     
     st.markdown("---")
     st.subheader("收益分布对比")
-    fig_dist = create_comparison_probability_chart(comparison_stats, realistic_params)
+    fig_dist = create_comparison_probability_chart(comparison_stats, realistic_params, use_cash_flow)
     st.plotly_chart(fig_dist, use_container_width=True)
     
     st.markdown("---")
     st.subheader("收益差异随起始日期变化")
-    fig_timeline = create_comparison_timeline_chart(comparison_stats, realistic_params)
+    fig_timeline = create_comparison_timeline_chart(comparison_stats, realistic_params, use_cash_flow)
     st.plotly_chart(fig_timeline, use_container_width=True)
     
     st.markdown("---")

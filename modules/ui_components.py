@@ -365,7 +365,7 @@ def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
             with col2:
                 low_threshold = st.number_input("偏离<=", min_value=-50.0, max_value=0.0, value=default_low, step=1.0, key="low_val", help="价格低于均线该比例时增加定投")
             with col3:
-                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=default_low_m, step=0.1, key="low_m_val", help="低估时的定投倍数")
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=20.0, value=default_low_m, step=0.1, key="low_m_val", help="低估时的定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -374,7 +374,7 @@ def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
             with col2:
                 extreme_low_threshold = st.number_input("偏离<=", min_value=-50.0, max_value=0.0, value=default_extreme_low, step=1.0, key="extreme_low_val", help="价格低于均线该比例时加倍定投")
             with col3:
-                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=default_extreme_low_m, step=0.5, key="extreme_low_m_val", help="极度低估时的定投倍数")
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=20.0, value=default_extreme_low_m, step=0.5, key="extreme_low_m_val", help="极度低估时的定投倍数")
             
             config_params['extreme_high_threshold'] = extreme_high_threshold / 100
             config_params['high_threshold'] = high_threshold / 100
@@ -428,7 +428,7 @@ def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
             with col2:
                 trend_low_threshold = st.number_input("跌幅<=", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_LOW_THRESHOLD, step=1.0, key="trend_low", help="跌幅超过该值时增加定投")
             with col3:
-                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="trend_low_m", help="低估时的定投倍数")
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=20.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="trend_low_m", help="低估时的定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -437,7 +437,7 @@ def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
             with col2:
                 trend_extreme_low_threshold = st.number_input("跌幅<=", min_value=-100.0, max_value=0.0, value=DEFAULT_TREND_EXTREME_LOW_THRESHOLD, step=1.0, key="trend_extreme_low", help="跌幅超过该值时加倍定投")
             with col3:
-                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="trend_extreme_low_m", help="极度低估时的定投倍数")
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=20.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="trend_extreme_low_m", help="极度低估时的定投倍数")
             
             config_params['trend_extreme_high_threshold'] = trend_extreme_high_threshold / 100
             config_params['trend_high_threshold'] = trend_high_threshold / 100
@@ -496,7 +496,7 @@ def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
             with col2:
                 low_percentile = st.number_input("分位<=", min_value=0.0, max_value=50.0, value=DEFAULT_LOW_PERCENTILE, step=5.0, key="val_low", help="估值低于该分位时增加定投")
             with col3:
-                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=3.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="val_low_m", help="低估时的定投倍数")
+                low_multiplier = st.number_input("倍数", min_value=1.0, max_value=20.0, value=DEFAULT_LOW_MULTIPLIER, step=0.1, key="val_low_m", help="低估时的定投倍数")
             
             st.markdown("---")
             col1, col2, col3 = st.columns([2, 1, 3])
@@ -505,7 +505,7 @@ def _render_strategy_config_ui(date_range) -> SmartStrategyConfig:
             with col2:
                 extreme_low_percentile = st.number_input("分位<=", min_value=0.0, max_value=50.0, value=DEFAULT_EXTREME_LOW_PERCENTILE, step=5.0, key="val_extreme_low", help="估值低于该分位时加倍定投")
             with col3:
-                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=5.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="val_extreme_low_m", help="极度低估时的定投倍数")
+                extreme_low_multiplier = st.number_input("倍数", min_value=1.0, max_value=20.0, value=DEFAULT_EXTREME_LOW_MULTIPLIER, step=0.5, key="val_extreme_low_m", help="极度低估时的定投倍数")
             
             config_params['extreme_high_percentile'] = extreme_high_percentile
             config_params['high_percentile'] = high_percentile
